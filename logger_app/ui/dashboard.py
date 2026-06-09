@@ -360,6 +360,7 @@ class DashboardView(QWidget):
         right_sidebar = QFrame()
         right_sidebar.setObjectName("panel_frame")
         right_sidebar.setMinimumWidth(280)
+        right_sidebar.setMaximumWidth(450)
         right_sidebar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         right_sidebar.setStyleSheet("QFrame#panel_frame { background-color:#FFFFFF; border-left:1px solid #DFE1E6; }")
 
@@ -443,6 +444,8 @@ class DashboardView(QWidget):
         # Default split: left 70%, right 30% — user can drag to resize
         splitter.setStretchFactor(0, 7)
         splitter.setStretchFactor(1, 3)
+        # Enforce initial sizes to prevent graph from taking over
+        splitter.setSizes([800, 350])
         root.addWidget(splitter, stretch=1)
 
     # ── Public API ────────────────────────────────────────────────────

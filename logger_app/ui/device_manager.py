@@ -52,6 +52,11 @@ PARITIES   = ["N", "E", "O", "S", "M"]
 STOPBITS   = ["1", "1.5", "2"]
 BYTESIZES  = ["8", "7", "6", "5"]
 
+class NoScrollComboBox(QComboBox):
+    def wheelEvent(self, e):
+        e.ignore()
+
+
 
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text)
@@ -176,11 +181,11 @@ class DeviceManagerView(QWidget):
         slay.setContentsMargins(0, 0, 0, 0)
         slay.setSpacing(8)
         self.entry_comport = QLineEdit(); self.entry_comport.setPlaceholderText("COM1")
-        self.entry_baudrate = QComboBox(); self.entry_baudrate.addItems(BAUDRATES); self.entry_baudrate.setCurrentText("9600")
-        self.entry_parity   = QComboBox(); self.entry_parity.addItems(PARITIES)
-        self.entry_stopbits = QComboBox(); self.entry_stopbits.addItems(STOPBITS)
-        self.entry_bytesize = QComboBox(); self.entry_bytesize.addItems(BYTESIZES)
-        self.entry_method   = QComboBox(); self.entry_method.addItems(["rtu", "ascii"])
+        self.entry_baudrate = NoScrollComboBox(); self.entry_baudrate.addItems(BAUDRATES); self.entry_baudrate.setCurrentText("9600")
+        self.entry_parity   = NoScrollComboBox(); self.entry_parity.addItems(PARITIES)
+        self.entry_stopbits = NoScrollComboBox(); self.entry_stopbits.addItems(STOPBITS)
+        self.entry_bytesize = NoScrollComboBox(); self.entry_bytesize.addItems(BYTESIZES)
+        self.entry_method   = NoScrollComboBox(); self.entry_method.addItems(["rtu", "ascii"])
         self.entry_slave_s  = QLineEdit("1")
         _field("COM PORT",  self.entry_comport,  slay)
         _field("BAUD RATE", self.entry_baudrate, slay)
@@ -220,12 +225,12 @@ class DeviceManagerView(QWidget):
         self.entry_reg_addr = QLineEdit()
         self.entry_reg_addr.setPlaceholderText("e.g. 3000")
 
-        self.entry_reg_name = QComboBox()
+        self.entry_reg_name = NoScrollComboBox()
         self.entry_reg_name.setEditable(True)
         self.entry_reg_name.addItems([""] + DEFAULT_REGISTER_NAMES)
         self.entry_reg_name.currentTextChanged.connect(self._auto_fill_unit)
 
-        self.entry_reg_unit = QComboBox()
+        self.entry_reg_unit = NoScrollComboBox()
         self.entry_reg_unit.setEditable(True)
         self.entry_reg_unit.addItems([""] + COMMON_UNITS)
 
@@ -236,15 +241,15 @@ class DeviceManagerView(QWidget):
         reg_grid.addWidget(_flbl("UNIT"),            0, 3)
         reg_grid.addWidget(self.entry_reg_unit,      1, 3)
 
-        self.entry_reg_type = QComboBox()
+        self.entry_reg_type = NoScrollComboBox()
         self.entry_reg_type.addItems(DATA_TYPES)
         reg_grid.addWidget(_flbl("DATA TYPE"),       2, 0, 1, 4)
         reg_grid.addWidget(self.entry_reg_type,      3, 0, 1, 4)
 
-        self.entry_reg_op = QComboBox()
+        self.entry_reg_op = NoScrollComboBox()
         self.entry_reg_op.addItems(["/", "*"])
         self.entry_reg_factor = QLineEdit("1")
-        self.entry_reg_prec = QComboBox()
+        self.entry_reg_prec = NoScrollComboBox()
         self.entry_reg_prec.addItems(["1", "0.1", "0.01", "0.001", "0.0001", "0.00001"])
         self.entry_reg_prec.setCurrentText("0.1")
         self.entry_reg_prec.setToolTip(
@@ -259,7 +264,7 @@ class DeviceManagerView(QWidget):
         reg_grid.addWidget(_flbl("DECIMALS"),       4, 2, 1, 2)
         reg_grid.addWidget(self.entry_reg_prec,     5, 2, 1, 2)
 
-        self.entry_reg_mode = QComboBox()
+        self.entry_reg_mode = NoScrollComboBox()
         self.entry_reg_mode.addItems(REGISTER_MODES)
         reg_grid.addWidget(_flbl("REGISTER TYPE (FUNCTION CODE)"), 6, 0, 1, 4)
         reg_grid.addWidget(self.entry_reg_mode,      7, 0, 1, 4)
@@ -289,6 +294,8 @@ class DeviceManagerView(QWidget):
         self.mini_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.mini_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.mini_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.mini_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.mini_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.mini_table.doubleClicked.connect(self._prefill_reg_from_row)
         reg_lay.addWidget(self.mini_table)
 
@@ -342,6 +349,8 @@ class DeviceManagerView(QWidget):
         self.device_table.setRootIsDecorated(False)
         self.device_table.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.device_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.device_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.device_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         right_layout.addWidget(self.device_table)
 
         # Actions bar

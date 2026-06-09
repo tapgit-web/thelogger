@@ -12,7 +12,7 @@ python -m pip install pyinstaller Pillow reportlab requests pymodbus >nul
 
 rem Run PyInstaller
 echo [2/3] Generating Executable (this may take a minute)...
-python -m PyInstaller --noconfirm --onefile --windowed --icon "icon.ico" --add-data "icon.ico;." --add-data "icon.png;." --hidden-import=reportlab --name "THE_LOGGER" main.py
+python -m PyInstaller --noconfirm --onefile --windowed --icon "icon.ico" --add-data "icon.ico;." --add-data "icon.png;." --add-data "fonts;fonts" --hidden-import=reportlab --name "THE_LOGGER" main.py
 
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed during PyInstaller phase.

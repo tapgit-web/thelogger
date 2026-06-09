@@ -139,18 +139,29 @@ class SplashScreen(QWidget):
         layout.setSpacing(16)
 
         # Logo
-        icon_p = resource_path("icon.png")
-        if os.path.exists(icon_p):
-            logo_lbl = QLabel()
-            pix = QPixmap(icon_p).scaled(90, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_lbl.setPixmap(pix)
-            logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            logo_lbl.setStyleSheet("background: transparent;")
-            layout.addWidget(logo_lbl)
+        # icon_p = resource_path("icon.png")
+        # if os.path.exists(icon_p):
+        #     logo_lbl = QLabel()
+        #     pix = QPixmap(icon_p).scaled(90, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        #     logo_lbl.setPixmap(pix)
+        #     logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        #     logo_lbl.setStyleSheet("background: transparent;")
+        #     layout.addWidget(logo_lbl)
 
-        title = QLabel("THE LOGGER")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #10B981; font-size: 28pt; font-weight: bold; background: transparent;")
+        title = QLabel()
+        title_p = resource_path("the_logger_text_logo.png")
+        if os.path.exists(title_p):
+            pix2 = QPixmap(title_p).scaled(300, 90, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            title.setPixmap(pix2)
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet("background: transparent;")
+        else:
+            title.setText(
+                "<span style='font-family:\"Buongiorno_Rastellino\", \"Buongiorno_Rastellino Script\";'>THE</span> "
+                "<span style='font-family:\"Josefin Sans\";'>LOGGER</span>"
+            )
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet("color: #10B981; font-size: 32pt; font-weight: bold; background: transparent;")
         layout.addWidget(title)
 
         self.status_lbl = QLabel("INITIALIZING SYSTEM...")

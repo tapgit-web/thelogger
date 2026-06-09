@@ -11,9 +11,10 @@ import os
 # Attempting to override it causes an "Access is denied" error.
 
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QFontDatabase
 
 from logger_app.ui.auth_views import show_login_flow
+from logger_app.backend.core import resource_path
 
 
 def main():
@@ -22,10 +23,17 @@ def main():
     app.setOrganizationName("The Automation People")
     app.setApplicationVersion("2.0.0")
 
+    # Load custom fonts
+    f1 = resource_path(os.path.join("fonts", "JosefinSans-VariableFont_wght.ttf"))
+    f2 = resource_path(os.path.join("fonts", "Buongiorno Rastellino.otf"))
+    if os.path.exists(f1):
+        QFontDatabase.addApplicationFont(f1)
+    if os.path.exists(f2):
+        QFontDatabase.addApplicationFont(f2)
+
     # ── Professional font stack ──────────────────────────────────────
-    # Segoe UI is the Windows system font; set it explicitly so it's
-    # applied before any stylesheet rules.
-    ui_font = QFont("Segoe UI", 10, QFont.Weight.Normal)
+    # User requested Josefin Sans as the primary font and Buongiorno Rastellino for logos
+    ui_font = QFont("Josefin Sans", 10, QFont.Weight.Normal)
     ui_font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
     app.setFont(ui_font)
 

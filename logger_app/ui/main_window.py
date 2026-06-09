@@ -121,23 +121,39 @@ class MainWindow(QMainWindow):
         # ── Logo strip ───────────────────────────────────────────────
         logo_frame = QFrame()
         logo_frame.setObjectName("logo_frame")
-        logo_frame.setFixedHeight(64)
+        logo_frame.setFixedHeight(75)
         lf_lay = QHBoxLayout(logo_frame)
-        lf_lay.setContentsMargins(22, 0, 22, 0)
+        lf_lay.setContentsMargins(22, 10, 22, 10)
 
         chart_icon_lbl = QLabel()
-        chart_icon_lbl.setPixmap(
-            icon("fa5s.chart-line", "#10B981", 22).pixmap(QSize(28, 28))
-        )
+        icon_p = resource_path("icon.png")
+        if os.path.exists(icon_p):
+            from PyQt6.QtGui import QPixmap
+            pix = QPixmap(icon_p).scaled(28, 28, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            chart_icon_lbl.setPixmap(pix)
+        else:
+            chart_icon_lbl.setPixmap(
+                icon("fa5s.chart-line", "#10B981", 22).pixmap(QSize(28, 28))
+            )
         chart_icon_lbl.setStyleSheet("background: transparent;")
 
-        logo_lbl = QLabel("<span style='color:#10B981; font-weight:700;'>THE</span> <span style='color:#172B4D; font-weight:300;'>LOGGER</span>")
+        logo_lbl = QLabel()
+        logo_p = resource_path("the_logger_text_logo.png")
+        if os.path.exists(logo_p):
+            from PyQt6.QtGui import QPixmap
+            pix2 = QPixmap(logo_p).scaled(150, 55, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_lbl.setPixmap(pix2)
+        else:
+            logo_lbl.setText(
+                "<span style='font-family:\"Buongiorno_Rastellino\", \"Buongiorno_Rastellino Script\"; color:#10B981; font-weight:700;'>THE</span> "
+                "<span style='font-family:\"Josefin Sans\"; color:#172B4D;'>LOGGER</span>"
+            )
         logo_lbl.setStyleSheet(
             "font-size:18pt; background:transparent;"
         )
 
-        lf_lay.addWidget(chart_icon_lbl)
-        lf_lay.addSpacing(8)
+        # lf_lay.addWidget(chart_icon_lbl)
+        # lf_lay.addSpacing(8)
         lf_lay.addWidget(logo_lbl)
         lf_lay.addStretch()
         sb.addWidget(logo_frame)
