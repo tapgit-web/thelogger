@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Mail, Shield, Save, Play, CheckCircle, AlertCircle } from "lucide-react";
+import { API_URL } from "@/config";
 
 export default function SettingsView() {
   const [smtpServer, setSmtpServer] = useState("smtp.gmail.com");
@@ -19,7 +20,7 @@ export default function SettingsView() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/settings/email");
+      const res = await fetch(`${API_URL}/api/settings/email`);
       if (res.ok) {
         const data = await res.json();
         setSmtpServer(data.smtp_server || "");
@@ -55,7 +56,7 @@ export default function SettingsView() {
     };
 
     try {
-      const res = await fetch("http://localhost:8000/api/settings/email", {
+      const res = await fetch(`${API_URL}/api/settings/email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -83,7 +84,7 @@ export default function SettingsView() {
     setFeedback(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/settings/test-email", {
+      const res = await fetch(`${API_URL}/api/settings/test-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

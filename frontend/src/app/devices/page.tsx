@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle } from "lucide-react";
+import { API_URL } from "@/config";
 
 interface Device {
   id: number;
@@ -68,7 +69,7 @@ export default function DeviceManager() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/devices");
+      const res = await fetch(`${API_URL}/api/devices`);
       const data = await res.json();
       setDevices(data);
       if (data.length > 0 && !selectedDevice) {
@@ -93,7 +94,7 @@ export default function DeviceManager() {
 
   const fetchRegisters = async (deviceId: number) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/devices/${deviceId}/registers`);
+      const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`);
       const data = await res.json();
       setRegisters(data);
     } catch (err) {
@@ -173,8 +174,8 @@ export default function DeviceManager() {
 
     try {
       const url = editingDevice 
-        ? `http://localhost:8000/api/devices/${editingDevice.id}`
-        : "http://localhost:8000/api/devices";
+        ? `${API_URL}/api/devices/${editingDevice.id}`
+        : `${API_URL}/api/devices`;
       
       const method = editingDevice ? "PUT" : "POST";
       
@@ -213,7 +214,7 @@ export default function DeviceManager() {
   const deleteDevice = async (id: number) => {
     if (!confirm("Are you sure you want to delete this device and all its registers?")) return;
     try {
-      await fetch(`http://localhost:8000/api/devices/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/api/devices/${id}`, { method: "DELETE" });
       const nextDevices = devices.filter(d => d.id !== id);
       setDevices(nextDevices);
       setSelectedDevice(nextDevices.length > 0 ? nextDevices[0] : null);
@@ -272,8 +273,8 @@ export default function DeviceManager() {
 
     try {
       const url = editingRegister
-        ? `http://localhost:8000/api/registers/${editingRegister.id}`
-        : "http://localhost:8000/api/registers";
+        ? `${API_URL}/api/registers/${editingRegister.id}`
+        : `${API_URL}/api/registers`;
       
       const method = editingRegister ? "PUT" : "POST";
       
@@ -308,7 +309,7 @@ export default function DeviceManager() {
   const deleteRegister = async (id: number) => {
     if (!confirm("Are you sure you want to delete this register?")) return;
     try {
-      await fetch(`http://localhost:8000/api/registers/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/api/registers/${id}`, { method: "DELETE" });
       setRegisters(registers.filter(r => r.id !== id));
     } catch (err) {
       setRegisters(registers.filter(r => r.id !== id));

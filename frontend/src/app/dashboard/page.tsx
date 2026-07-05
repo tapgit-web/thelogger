@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Play, Square, Activity, Database, AlertCircle, RefreshCw } from "lucide-react";
+import { API_URL, WS_URL } from "@/config";
 
 interface RegisterReading {
   id: number;
@@ -30,7 +31,7 @@ export default function Dashboard() {
     const connect = () => {
       if (!active) return;
       setWsStatus("connecting");
-      ws = new WebSocket("ws://localhost:8000/api/ws/live");
+      ws = new WebSocket(`${WS_URL}/api/ws/live`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -95,7 +96,7 @@ export default function Dashboard() {
 
   const togglePolling = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/polling/toggle", {
+      const response = await fetch(`${API_URL}/api/polling/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
