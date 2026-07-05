@@ -12,7 +12,7 @@ import os, hashlib
 
 from ..backend.core import (
     load_local_license, save_local_license, check_license_online,
-    get_hwid, load_users, resource_path
+    get_hwid, load_users, resource_path, get_trial_status
 )
 from .icons import btn_icon, icon
 
@@ -23,16 +23,32 @@ def show_login_flow():
     app = QApplication.instance() or QApplication(sys.argv)
 
     # Load stylesheet
-    qss_path = os.path.join(os.path.dirname(__file__), "styles.qss")
+    qss_path = resource_path(os.path.join("logger_app", "ui", "styles.qss"))
     if os.path.exists(qss_path):
         with open(qss_path) as f:
             app.setStyleSheet(f.read())
 
-    if load_local_license():
-        splash = SplashScreen()
-        splash.show()
+    key = load_local_license()
+    if key:
+        # Check online if the license is still valid
+        valid, msg = check_license_online(key)
+        
+        if valid or "Connection Error" in msg:
+            # If valid, or if there's no internet (Connection Error), allow access
+            splash = SplashScreen()
+            splash.show()
+        else:
+            # Server explicitly rejected the key (Expired or Revoked)
+            from ..backend.core import LICENSE_FILE
+            if os.path.exists(LICENSE_FILE):
+                os.remove(LICENSE_FILE)
+            t_status, t_days, t_msg = get_trial_status()
+            act = ActivationWindow(trial_status=(t_status, t_days, t_msg))
+            act.status_lbl.setText(f"❌ {msg}")
+            act.show()
     else:
-        act = ActivationWindow()
+        t_status, t_days, t_msg = get_trial_status()
+        act = ActivationWindow(trial_status=(t_status, t_days, t_msg))
         act.show()
 
     sys.exit(app.exec())
@@ -40,10 +56,13 @@ def show_login_flow():
 
 # =====================================================================
 class ActivationWindow(QWidget):
-    def __init__(self):
+    def __init__(self, trial_status=None):
         super().__init__()
+        self.trial_status = trial_status or ("expired", 0, "No trial active.")
+        t_status, t_days, t_msg = self.trial_status
+
         self.setWindowTitle("THE LOGGER — Activation")
-        self.setFixedSize(460, 320)
+        self.setFixedSize(460, 410)
         self.setStyleSheet(".QWidget { background-color: #F0F2F5; }")
         self._center()
 
@@ -55,16 +74,39 @@ class ActivationWindow(QWidget):
             QFrame { background: #FFFFFF; border-radius: 12px; }
         """)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(40, 36, 40, 36)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(40, 20, 40, 20)
+        card_layout.setSpacing(10)
+
+        logo_lbl = QLabel()
+        logo_p = resource_path("the_logger_text_logo.png")
+        if os.path.exists(logo_p):
+            pix = QPixmap(logo_p).scaled(220, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_lbl.setPixmap(pix)
+        else:
+            logo_lbl.setText(
+                "<span style='font-family:\"Buongiorno_Rastellino\", \"Buongiorno_Rastellino Script\", \"Brush Script MT\", cursive; color:#10B981; font-weight:700; font-size:24pt;'>THE</span> "
+                "<span style='font-family:\"Josefin Sans\", sans-serif; color:#172B4D; font-size:24pt; font-weight:bold;'>LOGGER</span>"
+            )
+        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_lbl.setStyleSheet("background: transparent;")
 
         title = QLabel("SYSTEM LOCKED")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #10B981; font-size: 16pt; font-weight: bold; background: transparent;")
+        title.setStyleSheet("color: #D32F2F; font-size: 11pt; font-weight: bold; background: transparent; letter-spacing: 1px;")
 
-        sub = QLabel("ONLINE ACTIVATION REQUIRED")
+        if t_status == "active":
+            sub_text = f"TRIAL PERIOD ACTIVE ({t_days} DAYS REMAINING)"
+            sub_color = "#10B981"
+        elif t_status == "tampered":
+            sub_text = "CLOCK TAMPERING DETECTED"
+            sub_color = "#D32F2F"
+        else:
+            sub_text = "TRIAL EXPIRED - ACTIVATION REQUIRED"
+            sub_color = "#D32F2F"
+
+        sub = QLabel(sub_text)
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setStyleSheet("color: #65676B; font-size: 9pt; background: transparent;")
+        sub.setStyleSheet(f"color: {sub_color}; font-size: 9pt; font-weight: bold; background: transparent;")
 
         hwid_box = QFrame()
         hwid_box.setStyleSheet(".QFrame { background-color: #F0F2F5; border-radius: 6px; }")
@@ -83,22 +125,35 @@ class ActivationWindow(QWidget):
         self.key_entry.setPlaceholderText("XXXX-XXXX-XXXX-XXXX")
         self.key_entry.returnPressed.connect(self._activate)
 
+        # Buttons side-by-side
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
         self.btn = QPushButton("  Activate System")
         self.btn.setObjectName("blue_btn")
         self.btn.setIcon(btn_icon("activate"))
         self.btn.setIconSize(QSize(14, 14))
         self.btn.clicked.connect(self._activate)
+        btn_layout.addWidget(self.btn)
+
+        if t_status == "active":
+            self.trial_btn = QPushButton(f"  Continue Trial ({t_days}d)")
+            self.trial_btn.setIcon(btn_icon("authenticate"))
+            self.trial_btn.setIconSize(QSize(14, 14))
+            self.trial_btn.clicked.connect(self._continue_trial)
+            btn_layout.addWidget(self.trial_btn)
 
         self.status_lbl = QLabel("")
         self.status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_lbl.setStyleSheet("color: #10B981; background: transparent;")
 
+        card_layout.addWidget(logo_lbl)
         card_layout.addWidget(title)
         card_layout.addWidget(sub)
         card_layout.addWidget(hwid_box)
         card_layout.addWidget(key_lbl)
         card_layout.addWidget(self.key_entry)
-        card_layout.addWidget(self.btn)
+        card_layout.addLayout(btn_layout)
         card_layout.addWidget(self.status_lbl)
 
         layout.addWidget(card)
@@ -106,6 +161,11 @@ class ActivationWindow(QWidget):
     def _center(self):
         screen = QApplication.primaryScreen().geometry()
         self.move((screen.width() - self.width()) // 2, (screen.height() - self.height()) // 2)
+
+    def _continue_trial(self):
+        self.close()
+        self.splash = SplashScreen()
+        self.splash.show()
 
     def _activate(self):
         key = self.key_entry.text().strip().upper()
@@ -211,13 +271,9 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("THE LOGGER — Secure Access")
-        self.setFixedSize(420, 340)
+        self.setFixedSize(420, 390)
         self.setStyleSheet(".QWidget { background-color: #F0F2F5; }")
         self._center()
-
-        icon_p = resource_path("icon.png")
-        if os.path.exists(icon_p):
-            self.setWindowIcon(QIcon(icon_p))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -225,12 +281,25 @@ class LoginWindow(QWidget):
         card = QFrame()
         card.setStyleSheet("QFrame { background: #FFFFFF; border-radius: 12px; }")
         cl = QVBoxLayout(card)
-        cl.setContentsMargins(40, 36, 40, 36)
-        cl.setSpacing(14)
+        cl.setContentsMargins(40, 24, 40, 24)
+        cl.setSpacing(12)
+
+        logo_lbl = QLabel()
+        logo_p = resource_path("the_logger_text_logo.png")
+        if os.path.exists(logo_p):
+            pix = QPixmap(logo_p).scaled(220, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_lbl.setPixmap(pix)
+        else:
+            logo_lbl.setText(
+                "<span style='font-family:\"Buongiorno_Rastellino\", \"Buongiorno_Rastellino Script\", \"Brush Script MT\", cursive; color:#10B981; font-weight:700; font-size:24pt;'>THE</span> "
+                "<span style='font-family:\"Josefin Sans\", sans-serif; color:#172B4D; font-size:24pt; font-weight:bold;'>LOGGER</span>"
+            )
+        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_lbl.setStyleSheet("background: transparent;")
 
         title = QLabel("SECURE ACCESS")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #1C1E21; font-size: 16pt; font-weight: bold; background: transparent;")
+        title.setStyleSheet("color: #65676B; font-size: 10pt; font-weight: bold; background: transparent; letter-spacing: 1px;")
 
         def fld(lbl_txt, pw=False):
             f = QFrame(); f.setStyleSheet("background: transparent;")
@@ -257,6 +326,7 @@ class LoginWindow(QWidget):
         self.err_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.err_lbl.setStyleSheet("color: #10B981; background: transparent;")
 
+        cl.addWidget(logo_lbl)
         cl.addWidget(title)
         cl.addWidget(u_frame)
         cl.addWidget(p_frame)

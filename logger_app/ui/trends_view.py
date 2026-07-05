@@ -369,18 +369,298 @@ class TrendsView(QWidget):
     def export_pdf(self):
         if not HAS_REPORTLAB:
             QMessageBox.critical(self, "Error", "reportlab not installed."); return
+            
+        if not self.pivoted_data:
+            QMessageBox.warning(self, "No Data", "No historical data found for the selected date range and registers.")
+            return
+
         export_dir = QFileDialog.getExistingDirectory(self, "Select Export Folder")
         if not export_dir: return
+
+        def draw_cell(canvas, text, x, y, width, height, align="left", bold=False, font_size=8):
+            font_name = "Helvetica-Bold" if bold else "Helvetica"
+            canvas.setFont(font_name, font_size)
+            
+            text_str = str(text)
+            while canvas.stringWidth(text_str, font_name, font_size) > (width - 4) and len(text_str) > 3:
+                text_str = text_str[:-4] + "..."
+                
+            if align == "right":
+                canvas.drawRightString(x + width - 2, y + 3, text_str)
+            elif align == "center":
+                canvas.drawCentredString(x + width / 2, y + 3, text_str)
+            else:
+                canvas.drawString(x + 2, y + 3, text_str)
+
         try:
             dev   = self.app.devices[self.dev_cb.currentIndex()]
             alias = (dev.get('device_name') or dev['ip']).replace(' ','_')
             fn    = os.path.join(export_dir, f"TrendReport_{alias}_{datetime.now().strftime('%H%M%S')}.pdf")
+            
             c = rl_canvas.Canvas(fn, pagesize=landscape(letter))
             w, h = landscape(letter)
-            c.setFont("Helvetica-Bold", 18); c.setFillColorRGB(0, 0.36, 0.72)
-            c.drawString(40, h-50, "THE LOGGER — TREND REPORT")
-            c.setFont("Helvetica", 9); c.setFillColorRGB(0.4,0.4,0.4)
-            c.drawString(40, h-70, f"Device: {alias}  |  Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # --- PAGE 1: TITLE & GRAPH ---
+            # Title Banner
+            c.setFillColorRGB(0.06, 0.72, 0.51) # Theme Emerald Green
+            c.rect(40, h - 70, w - 80, 40, fill=True, stroke=False)
+            
+            c.setFillColorRGB(1, 1, 1)
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(55, h - 52, "THE LOGGER — HISTORIC TREND REPORT")
+            
+            # Metadata Box
+            c.setFillColorRGB(0.94, 0.95, 0.96)
+            c.rect(40, h - 145, w - 80, 65, fill=True, stroke=True)
+            
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(60, h - 100, "Device:")
+            c.drawString(60, h - 118, "Date Range:")
+            c.drawString(60, h - 136, "Exported:")
+            
+            c.setFont("Helvetica", 9)
+            f_dt_str = self._get_date(self.from_dt).strftime('%Y-%m-%d %H:%M:%S')
+            t_dt_str = self._get_date(self.to_dt).strftime('%Y-%m-%d %H:%M:%S')
+            dev_name = dev.get('device_name') or dev['ip']
+            c.drawString(140, h - 100, f"{dev_name}")
+            c.drawString(140, h - 118, f"{f_dt_str}   to   {t_dt_str}")
+            c.drawString(140, h - 136, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            selected_regs = sorted([reg for reg, cb in self.reg_vars if cb.isChecked()])
+            addr_to_name = {str(reg): dev.get('names', {}).get(str(reg), f"REG {reg}") for reg in selected_regs}
+
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(500, h - 100, "Total Parameters:")
+            c.drawString(500, h - 118, "Total Records:")
+            
+            c.setFont("Helvetica", 9)
+            c.drawString(610, h - 100, f"{len(selected_regs)}")
+            c.drawString(610, h - 118, f"{len(self.pivoted_data)}")
+
+            # --- PLOT AREA MATH & DIRECT VECTOR DRAWING ---
+            x_min = 70
+            x_max = w - 40 # 752
+            y_min = 60
+            y_max = h - 180 # 432
+            W_plot = x_max - x_min # 682
+            H_plot = y_max - y_min # 372
+            
+            # Draw plot area background
+            c.setFillColorRGB(0.97, 0.97, 0.98)
+            c.rect(x_min, y_min, W_plot, H_plot, fill=True, stroke=True)
+            
+            # Gather all values to compute Y scaling
+            all_vals = []
+            for reg in selected_regs:
+                lid = f"{dev['ip']}:{dev['port']}:{dev.get('slave_id',1)}:{reg}"
+                data = self.app.data_history.get(lid, [])
+                if data:
+                    all_vals.extend(data)
+                    
+            # Check limits
+            lo_val = None
+            hi_val = None
+            cond = self.cond_cb.currentText()
+            try:
+                lo_str = self.low_limit.text().strip()
+                if lo_str and cond in ["Both Limits", "Low Limit Only"]:
+                    lo_val = float(lo_str)
+                    all_vals.append(lo_val)
+            except: pass
+            try:
+                hi_str = self.high_limit.text().strip()
+                if hi_str and cond in ["Both Limits", "Upper Limit Only"]:
+                    hi_val = float(hi_str)
+                    all_vals.append(hi_val)
+            except: pass
+            
+            if not all_vals:
+                all_vals = [0.0, 100.0]
+                
+            min_y = min(all_vals)
+            max_y = max(all_vals)
+            if min_y == max_y:
+                min_y -= 10
+                max_y += 10
+            else:
+                # Add 10% padding to top/bottom
+                padding = (max_y - min_y) * 0.1
+                min_y -= padding
+                max_y += padding
+                
+            # Draw Y-Axis grid lines & labels
+            prec = int(self.dec_cb.currentText())
+            c.setStrokeColorRGB(0.85, 0.85, 0.85)
+            c.setLineWidth(0.5)
+            c.setFont("Helvetica", 7)
+            c.setFillColorRGB(0.4, 0.4, 0.4)
+            for i in range(5):
+                y_val = min_y + i * (max_y - min_y) / 4
+                sy = y_min + (i * H_plot / 4)
+                c.line(x_min, sy, x_max, sy)
+                c.drawRightString(x_min - 8, sy - 2.5, f"{y_val:.{prec}f}")
+                
+            # Draw X-Axis grid lines & labels
+            t_count = len(self.timestamps_list)
+            if t_count > 1:
+                for i in range(5):
+                    idx = int(i * (t_count - 1) / 4)
+                    ts = self.timestamps_list[idx]
+                    sx = x_min + (i * W_plot / 4)
+                    c.line(sx, y_min, sx, y_max)
+                    try:
+                        time_str = ts.split(" ")[1] # HH:MM:SS
+                    except:
+                        time_str = ts
+                    c.drawCentredString(sx, y_min - 12, time_str)
+            else:
+                c.line(x_min + W_plot/2, y_min, x_min + W_plot/2, y_max)
+                c.drawCentredString(x_min + W_plot/2, y_min - 12, "00:00:00")
+                
+            # Draw Parameter Curves as Vector Paths
+            for i, reg in enumerate(selected_regs):
+                lid = f"{dev['ip']}:{dev['port']}:{dev.get('slave_id',1)}:{reg}"
+                data = self.app.data_history.get(lid, [])
+                if not data:
+                    continue
+                color_hex = PALETTE[i % len(PALETTE)]
+                r_c = int(color_hex[1:3], 16) / 255.0
+                g_c = int(color_hex[3:5], 16) / 255.0
+                b_c = int(color_hex[5:7], 16) / 255.0
+                
+                c.setStrokeColorRGB(r_c, g_c, b_c)
+                c.setLineWidth(1.5)
+                
+                path = c.beginPath()
+                for idx, val in enumerate(data):
+                    sx = x_min + (idx / max(t_count - 1, 1)) * W_plot
+                    sy = y_min + ((val - min_y) / (max_y - min_y)) * H_plot
+                    if idx == 0:
+                        path.moveTo(sx, sy)
+                    else:
+                        path.lineTo(sx, sy)
+                c.drawPath(path, stroke=True, fill=False)
+                
+            # Draw Limit Lines
+            c.setLineWidth(1.0)
+            if lo_val is not None:
+                c.setStrokeColorRGB(0.06, 0.72, 0.51)
+                c.setDash(4, 2)
+                sy = y_min + ((lo_val - min_y) / (max_y - min_y)) * H_plot
+                if y_min <= sy <= y_max:
+                    c.line(x_min, sy, x_max, sy)
+                    c.setFont("Helvetica-Bold", 7)
+                    c.setFillColorRGB(0.06, 0.72, 0.51)
+                    c.drawString(x_min + 10, sy + 3, f"Low Limit: {lo_val}")
+                    
+            if hi_val is not None:
+                c.setStrokeColorRGB(0.83, 0.18, 0.18)
+                c.setDash(4, 2)
+                sy = y_min + ((hi_val - min_y) / (max_y - min_y)) * H_plot
+                if y_min <= sy <= y_max:
+                    c.line(x_min, sy, x_max, sy)
+                    c.setFont("Helvetica-Bold", 7)
+                    c.setFillColorRGB(0.83, 0.18, 0.18)
+                    c.drawString(x_min + 10, sy + 3, f"Upper Limit: {hi_val}")
+            c.setDash() # clear dash pattern
+            
+            # Chart Border overlay
+            c.setStrokeColorRGB(0.4, 0.4, 0.4)
+            c.setLineWidth(1.0)
+            c.rect(x_min, y_min, W_plot, H_plot, fill=False, stroke=True)
+            
+            # Draw Chart Legend
+            leg_x = x_min + 10
+            leg_y = y_max + 8
+            c.setFont("Helvetica-Bold", 7)
+            for i, reg in enumerate(selected_regs):
+                name = addr_to_name.get(str(reg), f"REG {reg}")
+                color_hex = PALETTE[i % len(PALETTE)]
+                r_c = int(color_hex[1:3], 16) / 255.0
+                g_c = int(color_hex[3:5], 16) / 255.0
+                b_c = int(color_hex[5:7], 16) / 255.0
+                
+                c.setStrokeColorRGB(r_c, g_c, b_c)
+                c.setLineWidth(2.5)
+                c.line(leg_x, leg_y + 2.5, leg_x + 15, leg_y + 2.5)
+                
+                c.setFillColorRGB(0.2, 0.2, 0.2)
+                c.drawString(leg_x + 20, leg_y, name)
+                
+                text_w = c.stringWidth(name, "Helvetica-Bold", 7)
+                leg_x += 20 + text_w + 20
+                if leg_x > x_max - 50:
+                    leg_x = x_min + 10
+                    leg_y -= 10
+
+            # --- PAGE 2+: DETAILED TABLE ---
+            c.showPage()
+            page_num = 2
+            
+            margin = 40
+            total_width = w - 2 * margin
+            ts_width = 130
+            val_width = (total_width - ts_width) / len(selected_regs)
+            
+            # Adjust font size based on parameter count
+            font_size = 8
+            if len(selected_regs) > 8:
+                font_size = 7
+            if len(selected_regs) > 12:
+                font_size = 6
+
+            def draw_table_header(page):
+                c.setFillColorRGB(0.06, 0.72, 0.51)
+                c.rect(margin, h - 50, total_width, 22, fill=True, stroke=False)
+                
+                c.setFillColorRGB(0.4, 0.4, 0.4)
+                c.setFont("Helvetica", 8)
+                dev_name = dev.get('device_name') or dev['ip']
+                c.drawString(margin, h - 25, f"THE LOGGER — HISTORIC DATA LOG ({dev_name})")
+                c.drawRightString(w - margin, h - 25, f"Page {page}")
+                
+                c.setFillColorRGB(1, 1, 1)
+                draw_cell(c, "TIMESTAMP", margin, h - 50, ts_width, 22, align="left", bold=True, font_size=font_size)
+                for j, reg in enumerate(selected_regs):
+                    name = addr_to_name.get(str(reg), f"REG {reg}")
+                    draw_cell(c, name, margin + ts_width + j * val_width, h - 50, val_width, 22, align="right", bold=True, font_size=font_size)
+                
+                c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                c.setLineWidth(0.5)
+                c.line(margin, h - 50, w - margin, h - 50)
+                return h - 68
+
+            y = draw_table_header(page_num)
+            prec = int(self.dec_cb.currentText())
+            
+            for i, ts in enumerate(sorted(self.pivoted_data.keys())):
+                if y < 45:
+                    c.showPage()
+                    page_num += 1
+                    y = draw_table_header(page_num)
+                
+                if i % 2 == 0:
+                    c.setFillColorRGB(1, 1, 1)
+                else:
+                    c.setFillColorRGB(0.96, 0.97, 0.98)
+                c.rect(margin, y - 2, total_width, 16, fill=True, stroke=False)
+                
+                c.setStrokeColorRGB(0.9, 0.9, 0.9)
+                c.setLineWidth(0.3)
+                c.line(margin, y - 2, w - margin, y - 2)
+                
+                c.setFillColorRGB(0.2, 0.2, 0.2)
+                draw_cell(c, ts, margin, y - 2, ts_width, 16, align="left", font_size=font_size)
+                
+                for j, reg in enumerate(selected_regs):
+                    val = self.pivoted_data[ts].get(str(reg))
+                    val_str = f"{val:.{prec}f}" if val is not None else "---"
+                    c.setFillColorRGB(0.1, 0.1, 0.1)
+                    draw_cell(c, val_str, margin + ts_width + j * val_width, y - 2, val_width, 16, align="right", font_size=font_size)
+                
+                y -= 16
+
             c.save()
             QMessageBox.information(self, "Exported", f"Saved to:\n{fn}")
             import webbrowser; webbrowser.open(fn)

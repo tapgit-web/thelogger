@@ -21,7 +21,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("THE LOGGER")
     app.setOrganizationName("The Automation People")
-    app.setApplicationVersion("2.0.0")
+    app.setApplicationVersion("2.5.0")
 
     # Load custom fonts
     f1 = resource_path(os.path.join("fonts", "JosefinSans-VariableFont_wght.ttf"))
@@ -38,8 +38,8 @@ def main():
     app.setFont(ui_font)
 
     # ── Load stylesheet ──────────────────────────────────────────────
-    qss_path = os.path.join(
-        os.path.dirname(__file__), "logger_app", "ui", "styles.qss"
+    qss_path = resource_path(
+        os.path.join("logger_app", "ui", "styles.qss")
     )
     if os.path.exists(qss_path):
         with open(qss_path, "r", encoding="utf-8") as f:

@@ -95,7 +95,7 @@ class MainWindow(QMainWindow):
         if os.path.exists(icon_p):
             self.setWindowIcon(QIcon(icon_p))
 
-        qss_path = os.path.join(os.path.dirname(__file__), "styles.qss")
+        qss_path = resource_path(os.path.join("logger_app", "ui", "styles.qss"))
         if os.path.exists(qss_path):
             with open(qss_path, "r") as f:
                 self.setStyleSheet(f.read())

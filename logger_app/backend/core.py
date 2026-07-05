@@ -47,7 +47,7 @@ def resource_path(relative_path):
 
 # =================== LICENSE CONFIG ===================
 
-API_URL = "https://tap-server-v2.onrender.com/activate"
+API_URL = "http://localhost:3000/activate"
 LICENSE_FILE = os.path.join(os.getenv("APPDATA"), "Microsoft", "sys.dat")
 
 def get_hwid():
@@ -119,6 +119,123 @@ CONFIG_FILE        = os.path.join(DATA_PATH, "config", "devices.json")
 EMAIL_CONFIG_FILE  = os.path.join(DATA_PATH, "config", "email_settings.json")
 USERS_FILE         = os.path.join(DATA_PATH, "config", "users.json")
 TREND_CONFIG_FILE  = os.path.join(DATA_PATH, "config", "trend_settings.json")
+
+# =================== 30-DAY TRIAL CONFIG & LOGIC ===================
+
+TRIAL_FILE_1 = os.path.join(os.getenv("APPDATA"), "Microsoft", "sys_t.dat")
+TRIAL_FILE_2 = os.path.join(DATA_PATH, "config", "sys_t.dat")
+
+def get_trial_status():
+    """
+    Checks trial files, performs validation, updates last run, and restores missing file if one is deleted.
+    Returns: (status, days_left, msg)
+      status: "active", "expired", "tampered"
+    """
+    now = datetime.now()
+    
+    data_1 = None
+    data_2 = None
+    
+    # Try reading from path 1
+    if os.path.exists(TRIAL_FILE_1):
+        try:
+            with open(TRIAL_FILE_1, "r") as f:
+                content = f.read().strip()
+            decoded = deobfuscate_data(content)
+            if decoded:
+                data_1 = json.loads(decoded)
+        except:
+            pass
+            
+    # Try reading from path 2
+    if os.path.exists(TRIAL_FILE_2):
+        try:
+            with open(TRIAL_FILE_2, "r") as f:
+                content = f.read().strip()
+            decoded = deobfuscate_data(content)
+            if decoded:
+                data_2 = json.loads(decoded)
+        except:
+            pass
+
+    # If neither exists, initialize new trial
+    if data_1 is None and data_2 is None:
+        data = {
+            "start_date": now.isoformat(),
+            "last_run": now.isoformat()
+        }
+        obfuscated = obfuscate_data(json.dumps(data))
+        try:
+            os.makedirs(os.path.dirname(TRIAL_FILE_1), exist_ok=True)
+            with open(TRIAL_FILE_1, "w") as f:
+                f.write(obfuscated)
+        except:
+            pass
+        try:
+            os.makedirs(os.path.dirname(TRIAL_FILE_2), exist_ok=True)
+            with open(TRIAL_FILE_2, "w") as f:
+                f.write(obfuscated)
+        except:
+            pass
+        return "active", 30, "Trial started."
+
+    # If only one exists, restore the other! (Self-healing)
+    # If both exist, use the oldest start_date to prevent trial reset by modifying one.
+    if data_1 and data_2:
+        try:
+            start_1 = datetime.fromisoformat(data_1["start_date"])
+            start_2 = datetime.fromisoformat(data_2["start_date"])
+            start_date = min(start_1, start_2)
+            
+            last_run_1 = datetime.fromisoformat(data_1["last_run"])
+            last_run_2 = datetime.fromisoformat(data_2["last_run"])
+            last_run = max(last_run_1, last_run_2)
+        except:
+            return "expired", 0, "Trial data is corrupt."
+    elif data_1:
+        try:
+            start_date = datetime.fromisoformat(data_1["start_date"])
+            last_run = datetime.fromisoformat(data_1["last_run"])
+        except:
+            return "expired", 0, "Trial data is corrupt."
+    else:
+        try:
+            start_date = datetime.fromisoformat(data_2["start_date"])
+            last_run = datetime.fromisoformat(data_2["last_run"])
+        except:
+            return "expired", 0, "Trial data is corrupt."
+
+    # Tampering check
+    if now < last_run:
+        return "tampered", 0, "Clock rollback detected."
+        
+    # Trial duration calculation
+    elapsed = now - start_date
+    days_left = 30 - elapsed.days
+    
+    if days_left <= 0:
+        return "expired", 0, "Trial period has expired."
+        
+    # Update and sync both files with current time
+    updated_data = {
+        "start_date": start_date.isoformat(),
+        "last_run": now.isoformat()
+    }
+    obfuscated = obfuscate_data(json.dumps(updated_data))
+    try:
+        os.makedirs(os.path.dirname(TRIAL_FILE_1), exist_ok=True)
+        with open(TRIAL_FILE_1, "w") as f:
+            f.write(obfuscated)
+    except:
+        pass
+    try:
+        os.makedirs(os.path.dirname(TRIAL_FILE_2), exist_ok=True)
+        with open(TRIAL_FILE_2, "w") as f:
+            f.write(obfuscated)
+    except:
+        pass
+        
+    return "active", days_left, f"Trial active: {days_left} days remaining."
 
 # =================== CONFIG MIGRATION ===================
 
