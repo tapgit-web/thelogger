@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.core import get_db
 from app.models import DBUser
+from app.utils.security import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -23,4 +24,10 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     if user.password_hash != h:
         raise HTTPException(status_code=401, detail="Invalid username or password")
         
-    return {"username": user.username, "role": user.role}
+    access_token = create_access_token(data={"sub": user.username, "role": user.role})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": user.username,
+        "role": user.role
+    }

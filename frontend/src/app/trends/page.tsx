@@ -16,6 +16,12 @@ import {
 import { FileDown, Calendar, Search, Activity, HelpCircle } from "lucide-react";
 import { API_URL } from "@/config";
 
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("logger_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 interface Device {
   id: number;
   name: string;
@@ -51,7 +57,7 @@ export default function TrendsView() {
   // Fetch initial configuration
   const loadConfig = async () => {
     try {
-      const resDev = await fetch(`${API_URL}/api/devices`);
+      const resDev = await fetch(`${API_URL}/api/devices`, { headers: getAuthHeaders() });
       const listDev = await resDev.json();
       setDevices(listDev);
       if (listDev.length > 0) {
@@ -67,7 +73,7 @@ export default function TrendsView() {
 
   const loadRegisters = async (deviceId: number) => {
     try {
-      const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`);
+      const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`, { headers: getAuthHeaders() });
       const listReg = await res.json();
       setRegisters(listReg);
       if (listReg.length > 0) {
@@ -109,7 +115,7 @@ export default function TrendsView() {
     setLoading(true);
     
     try {
-      const res = await fetch(`${API_URL}/api/trends/data?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`);
+      const res = await fetch(`${API_URL}/api/trends/data?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setTrendData(data.points);
       setStats({
@@ -150,7 +156,7 @@ export default function TrendsView() {
     if (selectedRegister === "") return;
     setExporting(true);
     try {
-      const response = await fetch(`${API_URL}/api/trends/export-pdf?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`);
+      const response = await fetch(`${API_URL}/api/trends/export-pdf?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);

@@ -10,7 +10,8 @@ import {
   Settings, 
   Users, 
   LogOut,
-  Terminal
+  Terminal,
+  BellRing
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -21,6 +22,7 @@ export default function Sidebar() {
     { name: "Dashboard", href: "/dashboard", icon: Gauge },
     { name: "Device Manager", href: "/devices", icon: Cpu },
     { name: "Trends & Export", href: "/trends", icon: TrendingUp },
+    { name: "Alarms & Logs", href: "/logs", icon: BellRing },
     { name: "Settings & Alerts", href: "/settings", icon: Settings },
   ];
 

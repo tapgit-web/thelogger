@@ -7,6 +7,7 @@ from typing import Optional
 from app.core import get_db
 from app.models import DBDevice, DBRegister
 from app.services.modbus_worker import is_polling, start_polling, stop_polling
+from app.utils.security import get_current_user, get_admin_user
 
 router = APIRouter(tags=["devices"])
 
@@ -34,13 +35,14 @@ class RegisterCreate(BaseModel):
     unit: str = ""
     limit_min: Optional[float] = None
     limit_max: Optional[float] = None
+    slave_id: int = 1
 
 @router.get("/api/devices")
-def get_devices(db: Session = Depends(get_db)):
+def get_devices(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     return db.query(DBDevice).all()
 
 @router.post("/api/devices")
-def create_device(req: DeviceCreate, db: Session = Depends(get_db)):
+def create_device(req: DeviceCreate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     existing = db.query(DBDevice).filter(DBDevice.name == req.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Device name already exists")
@@ -67,7 +69,7 @@ def create_device(req: DeviceCreate, db: Session = Depends(get_db)):
     return dev
 
 @router.put("/api/devices/{id}")
-def update_device(id: int, req: DeviceCreate, db: Session = Depends(get_db)):
+def update_device(id: int, req: DeviceCreate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     dev = db.query(DBDevice).filter(DBDevice.id == id).first()
     if not dev:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -92,7 +94,7 @@ def update_device(id: int, req: DeviceCreate, db: Session = Depends(get_db)):
     return dev
 
 @router.delete("/api/devices/{id}")
-def delete_device(id: int, db: Session = Depends(get_db)):
+def delete_device(id: int, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     dev = db.query(DBDevice).filter(DBDevice.id == id).first()
     if not dev:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -107,12 +109,12 @@ def delete_device(id: int, db: Session = Depends(get_db)):
     return {"status": "success"}
 
 @router.get("/api/devices/{deviceId}/registers")
-def get_device_registers(deviceId: int, db: Session = Depends(get_db)):
+def get_device_registers(deviceId: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     return db.query(DBRegister).filter(DBRegister.device_id == deviceId).all()
 
 # --- Register Mapping ---
 @router.post("/api/registers")
-def create_register(req: RegisterCreate, db: Session = Depends(get_db)):
+def create_register(req: RegisterCreate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     reg = DBRegister(
         device_id=req.device_id,
         name=req.name,
@@ -123,7 +125,8 @@ def create_register(req: RegisterCreate, db: Session = Depends(get_db)):
         divisor=req.divisor,
         unit=req.unit,
         limit_min=req.limit_min,
-        limit_max=req.limit_max
+        limit_max=req.limit_max,
+        slave_id=req.slave_id
     )
     db.add(reg)
     db.commit()
@@ -136,7 +139,7 @@ def create_register(req: RegisterCreate, db: Session = Depends(get_db)):
     return reg
 
 @router.put("/api/registers/{id}")
-def update_register(id: int, req: RegisterCreate, db: Session = Depends(get_db)):
+def update_register(id: int, req: RegisterCreate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     reg = db.query(DBRegister).filter(DBRegister.id == id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Register not found")
@@ -150,6 +153,7 @@ def update_register(id: int, req: RegisterCreate, db: Session = Depends(get_db))
     reg.unit = req.unit
     reg.limit_min = req.limit_min
     reg.limit_max = req.limit_max
+    reg.slave_id = req.slave_id
     
     db.commit()
     db.refresh(reg)
@@ -161,7 +165,7 @@ def update_register(id: int, req: RegisterCreate, db: Session = Depends(get_db))
     return reg
 
 @router.delete("/api/registers/{id}")
-def delete_register(id: int, db: Session = Depends(get_db)):
+def delete_register(id: int, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     reg = db.query(DBRegister).filter(DBRegister.id == id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Register not found")

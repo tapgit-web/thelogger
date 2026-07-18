@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.core import get_db
 from app.models import DBUser
+from app.utils.security import get_admin_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -14,12 +15,12 @@ class UserCreate(BaseModel):
     role: str
 
 @router.get("")
-def get_users(db: Session = Depends(get_db)):
+def get_users(db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     users = db.query(DBUser).all()
     return [{"id": u.id, "username": u.username, "role": u.role} for u in users]
 
 @router.post("")
-def create_user(req: UserCreate, db: Session = Depends(get_db)):
+def create_user(req: UserCreate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     existing = db.query(DBUser).filter(DBUser.username == req.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
@@ -32,7 +33,7 @@ def create_user(req: UserCreate, db: Session = Depends(get_db)):
     return {"id": user.id, "username": user.username, "role": user.role}
 
 @router.delete("/{id}")
-def delete_user(id: int, db: Session = Depends(get_db)):
+def delete_user(id: int, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

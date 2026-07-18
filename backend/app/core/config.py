@@ -43,4 +43,9 @@ MODBUS_OVERRIDE_HOST = os.environ.get("MODBUS_OVERRIDE_HOST", "").strip() or Non
 MODBUS_OVERRIDE_PORT_STR = os.environ.get("MODBUS_OVERRIDE_PORT", "").strip()
 MODBUS_OVERRIDE_PORT = int(MODBUS_OVERRIDE_PORT_STR) if (MODBUS_OVERRIDE_PORT_STR and MODBUS_OVERRIDE_PORT_STR.isdigit()) else None
 
+# JWT Authentication Settings
+JWT_SECRET = os.environ.get("JWT_SECRET", "428df13b2c2df23145dae64bbdf023d6a97825dcf29a1b1819d4432101742de8")
+JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+JWT_EXPIRY_MINUTES = int(os.environ.get("JWT_EXPIRY_MINUTES", 1440))
+
 

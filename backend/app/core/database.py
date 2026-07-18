@@ -2,7 +2,7 @@ import os
 import json
 import hashlib
 import shutil
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import (
@@ -11,7 +11,7 @@ from app.core.config import (
     DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD
 )
 from app.models.db_models import Base, DBUser, DBDevice, DBRegister, DBEmailSettings
-from app.utils.security import decrypt_config
+
 
 if DATABASE_URL.startswith("sqlite"):
     print("Database: Connecting to SQLite local database.")
@@ -27,9 +27,22 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 def run_migrations():
+    from app.utils.security import decrypt_config
     init_db()
     db = SessionLocal()
     try:
+        # Self-healing migration check for new slave_id column in registers table
+        try:
+            db.execute(text("SELECT slave_id FROM registers LIMIT 1"))
+        except Exception:
+            db.rollback()
+            try:
+                print("Adding slave_id column to registers table...")
+                db.execute(text("ALTER TABLE registers ADD COLUMN slave_id INTEGER DEFAULT 1"))
+                db.commit()
+            except Exception as e:
+                print(f"Error adding slave_id column to registers: {e}")
+
         # Check if database has users. If not, try migrating users
         if db.query(DBUser).count() == 0:
             desktop_users_path = "/home/vicky/praveen-projects/python-desktop-application/logger_app/config/users.json"

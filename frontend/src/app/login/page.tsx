@@ -93,7 +93,7 @@ export default function Login() {
 
       const data = await response.json();
       if (response.ok) {
-        login(data.username, data.role);
+        login(data.username, data.role as "admin" | "user", data.access_token);
       } else {
         setError(data.detail || "Invalid credentials");
       }

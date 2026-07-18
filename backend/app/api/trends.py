@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core import get_db
 from app.models import DBDevice, DBRegister
 from app.services.pdf_report import parse_historical_data, generate_pdf_report
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
@@ -13,7 +14,8 @@ def get_trends_data(
     register_id: int,
     start_date: str = Query(...), # Format: 'YYYY-MM-DDTHH:MM' or 'YYYY-MM-DD HH:MM:SS'
     end_date: str = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     reg = db.query(DBRegister).filter(DBRegister.id == register_id).first()
     if not reg:
@@ -56,7 +58,8 @@ def export_trends_pdf(
     register_id: int,
     start_date: str = Query(...),
     end_date: str = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     reg = db.query(DBRegister).filter(DBRegister.id == register_id).first()
     if not reg:

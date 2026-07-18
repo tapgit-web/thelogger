@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.core import get_db
 from app.models import DBEmailSettings
 from app.utils import send_email
+from app.utils.security import get_current_user, get_admin_user
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -18,11 +19,11 @@ class EmailSettingsUpdate(BaseModel):
     receiver_email: str
 
 @router.get("/email")
-def get_email_settings(db: Session = Depends(get_db)):
+def get_email_settings(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     return db.query(DBEmailSettings).filter_by(id=1).first()
 
 @router.post("/email")
-def update_email_settings(req: EmailSettingsUpdate, db: Session = Depends(get_db)):
+def update_email_settings(req: EmailSettingsUpdate, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
     settings = db.query(DBEmailSettings).filter_by(id=1).first()
     if not settings:
         settings = DBEmailSettings(id=1)
@@ -41,7 +42,7 @@ def update_email_settings(req: EmailSettingsUpdate, db: Session = Depends(get_db
     return settings
 
 @router.post("/test-email")
-def test_email(req: EmailSettingsUpdate):
+def test_email(req: EmailSettingsUpdate, current_user = Depends(get_admin_user)):
     settings = DBEmailSettings(
         smtp_server=req.smtp_server,
         smtp_port=req.smtp_port,

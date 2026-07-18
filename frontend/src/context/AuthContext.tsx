@@ -13,7 +13,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isActivated: boolean;
   activationKey: string | null;
-  login: (username: string, role: "admin" | "user") => void;
+  token: string | null;
+  login: (username: string, role: "admin" | "user", token?: string) => void;
   logout: () => void;
   activate: (key: string) => void;
 }
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isActivated, setIsActivated] = useState<boolean>(false);
   const [activationKey, setActivationKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,11 +35,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Load auth status from localStorage on startup
     const storedUser = localStorage.getItem("logger_user");
     const storedRole = localStorage.getItem("logger_role");
+    const storedToken = localStorage.getItem("logger_token");
     const storedActivated = localStorage.getItem("logger_activated");
     const storedKey = localStorage.getItem("logger_activation_key");
 
     if (storedUser && storedRole) {
       setUser({ username: storedUser, role: storedRole as "admin" | "user" });
+    }
+    
+    if (storedToken) {
+      setToken(storedToken);
     }
     
     if (storedActivated === "true") {
@@ -63,9 +70,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, pathname, isLoading, router]);
 
-  const login = (username: string, role: "admin" | "user") => {
+  const login = (username: string, role: "admin" | "user", userToken?: string) => {
     localStorage.setItem("logger_user", username);
     localStorage.setItem("logger_role", role);
+    if (userToken) {
+      localStorage.setItem("logger_token", userToken);
+      setToken(userToken);
+    } else {
+      localStorage.removeItem("logger_token");
+      setToken(null);
+    }
     setUser({ username, role });
     router.push("/dashboard");
   };
@@ -73,7 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     localStorage.removeItem("logger_user");
     localStorage.removeItem("logger_role");
+    localStorage.removeItem("logger_token");
     setUser(null);
+    setToken(null);
     router.push("/login");
   };
 
@@ -87,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isActivated, activationKey, login, logout, activate }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isActivated, activationKey, token, login, logout, activate }}>
       {!isLoading && children}
     </AuthContext.Provider>
   );

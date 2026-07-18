@@ -5,6 +5,12 @@ import Sidebar from "@/components/Sidebar";
 import { Mail, Shield, Save, Play, CheckCircle, AlertCircle } from "lucide-react";
 import { API_URL } from "@/config";
 
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("logger_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 export default function SettingsView() {
   const [smtpServer, setSmtpServer] = useState("smtp.gmail.com");
   const [smtpPort, setSmtpPort] = useState(465);
@@ -20,7 +26,7 @@ export default function SettingsView() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/settings/email`);
+      const res = await fetch(`${API_URL}/api/settings/email`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setSmtpServer(data.smtp_server || "");
@@ -58,7 +64,7 @@ export default function SettingsView() {
     try {
       const res = await fetch(`${API_URL}/api/settings/email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -86,7 +92,7 @@ export default function SettingsView() {
     try {
       const res = await fetch(`${API_URL}/api/settings/test-email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           smtp_server: smtpServer,
           smtp_port: smtpPort,

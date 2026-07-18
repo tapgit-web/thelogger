@@ -40,6 +40,7 @@ class DBRegister(Base):
     unit = Column(String, default="")
     limit_min = Column(Float, nullable=True)
     limit_max = Column(Float, nullable=True)
+    slave_id = Column(Integer, default=1, nullable=False)
 
     device = relationship("DBDevice", back_populates="registers")
 

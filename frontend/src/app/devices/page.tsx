@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle, Search, Activity, Wifi, RefreshCw } from "lucide-react";
 import { API_URL } from "@/config";
+
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("logger_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
 
 interface Device {
   id: number;
@@ -30,6 +36,7 @@ interface Register {
   unit: string;
   limit_min?: number;
   limit_max?: number;
+  slave_id: number;
 }
 
 export default function DeviceManager() {
@@ -65,15 +72,153 @@ export default function DeviceManager() {
   const [regUnit, setRegUnit] = useState("");
   const [regMin, setRegMin] = useState<number | "">("");
   const [regMax, setRegMax] = useState<number | "">("");
+  const [regSlaveId, setRegSlaveId] = useState(1);
+
+  // Scan Wizard States
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanSubnet, setScanSubnet] = useState("127.0.0.1");
+  const [scanPorts, setScanPorts] = useState("5020, 5021");
+  const [scanningIPs, setScanningIPs] = useState(false);
+  const [discoveredIPs, setDiscoveredIPs] = useState<{ ip: string; port: number }[]>([]);
+  const [selectedScanIP, setSelectedScanIP] = useState<{ ip: string; port: number } | null>(null);
+  
+  const [scanningSlaves, setScanningSlaves] = useState(false);
+  const [detectedSlaves, setDetectedSlaves] = useState<number[]>([]);
+  const [scanStartId, setScanStartId] = useState(1);
+  const [scanEndId, setScanEndId] = useState(5);
+  const [scanImportName, setScanImportName] = useState("PLC_Sim");
+
+  const startIPScan = async () => {
+    setScanningIPs(true);
+    setDiscoveredIPs([]);
+    setSelectedScanIP(null);
+    setDetectedSlaves([]);
+    try {
+      const portList = scanPorts.split(",").map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+      const res = await fetch(`${API_URL}/api/scan/ips`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          subnet: scanSubnet,
+          ports: portList.length > 0 ? portList : [5020, 5021]
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDiscoveredIPs(data);
+        if (data.length > 0) {
+          setSelectedScanIP(data[0]);
+        }
+      }
+    } catch (err) {
+      console.error("IP scan failed:", err);
+    } finally {
+      setScanningIPs(false);
+    }
+  };
+
+  const startSlaveScan = async () => {
+    if (!selectedScanIP) return;
+    setScanningSlaves(true);
+    setDetectedSlaves([]);
+    try {
+      const res = await fetch(`${API_URL}/api/scan/slaves`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          ip: selectedScanIP.ip,
+          port: selectedScanIP.port,
+          start_id: scanStartId,
+          end_id: scanEndId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDetectedSlaves(data.active_slave_ids);
+      }
+    } catch (err) {
+      console.error("Slave scan failed:", err);
+    } finally {
+      setScanningSlaves(false);
+    }
+  };
+
+  const importDiscovered = async () => {
+    if (!selectedScanIP || detectedSlaves.length === 0) return;
+    try {
+      const devRes = await fetch(`${API_URL}/api/devices`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          name: `${scanImportName}_${selectedScanIP.port}`,
+          connection_type: "TCP",
+          host: selectedScanIP.ip,
+          port: selectedScanIP.port
+        })
+      });
+      
+      if (!devRes.ok) {
+        const errData = await devRes.json();
+        alert(errData.detail || "Failed to create device");
+        return;
+      }
+      
+      const newDev = await devRes.json();
+      
+      for (const slaveId of detectedSlaves) {
+        await fetch(`${API_URL}/api/devices/${newDev.id}/registers`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders()
+          },
+          body: JSON.stringify({
+            name: `Voltage Monitor (S${slaveId})`,
+            address: 30001,
+            register_type: "Input Register (FC04)",
+            data_type: "FLOAT32",
+            multiplier: 1.0,
+            divisor: 1.0,
+            unit: "V",
+            limit_min: 210,
+            limit_max: 250,
+            slave_id: slaveId
+          })
+        });
+      }
+      
+      fetchData();
+      setShowScanModal(false);
+    } catch (err) {
+      console.error("Failed to import discovered devices:", err);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/devices`);
+      const res = await fetch(`${API_URL}/api/devices`, { headers: getAuthHeaders() });
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
-      setDevices(data);
-      if (data.length > 0 && !selectedDevice) {
-        setSelectedDevice(data[0]);
+      if (Array.isArray(data)) {
+        setDevices(data);
+        if (data.length > 0 && !selectedDevice) {
+          setSelectedDevice(data[0]);
+        }
+      } else {
+        setDevices([]);
       }
     } catch (err) {
       console.error("Error fetching devices:", err);
@@ -94,19 +239,27 @@ export default function DeviceManager() {
 
   const fetchRegisters = async (deviceId: number) => {
     try {
-      const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`);
+      const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`, { headers: getAuthHeaders() });
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
-      setRegisters(data);
+      if (Array.isArray(data)) {
+        setRegisters(data);
+      } else {
+        setRegisters([]);
+      }
     } catch (err) {
       console.error("Error fetching registers:", err);
       // Mock registers
       const mockR: Register[] = [
-        { id: 1, device_id: 1, name: "Chiller Temperature", address: 40001, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "°C", limit_min: 5, limit_max: 35 },
-        { id: 2, device_id: 1, name: "Chiller State", address: 10001, register_type: "Discrete Input (FC02)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "ON/OFF" },
-        { id: 3, device_id: 1, name: "Pressure Limit Alarm", address: 1, register_type: "Coil (FC01)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "Alarm" },
-        { id: 4, device_id: 2, name: "Flow Rate", address: 30005, register_type: "Input Register (FC04)", data_type: "FLOAT32", multiplier: 1.0, divisor: 1.0, unit: "m³/h", limit_max: 200 },
-        { id: 5, device_id: 3, name: "Main Supply Voltage", address: 40020, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "V" },
-        { id: 6, device_id: 3, name: "Current Draw", address: 40022, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 100.0, unit: "A" }
+        { id: 1, device_id: 1, name: "Chiller Temperature", address: 40001, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "°C", limit_min: 5, limit_max: 35, slave_id: 1 },
+        { id: 2, device_id: 1, name: "Chiller State", address: 10001, register_type: "Discrete Input (FC02)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "ON/OFF", slave_id: 1 },
+        { id: 3, device_id: 1, name: "Pressure Limit Alarm", address: 1, register_type: "Coil (FC01)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "Alarm", slave_id: 1 },
+        { id: 4, device_id: 2, name: "Flow Rate", address: 30005, register_type: "Input Register (FC04)", data_type: "FLOAT32", multiplier: 1.0, divisor: 1.0, unit: "m³/h", limit_max: 200, slave_id: 1 },
+        { id: 5, device_id: 3, name: "Main Supply Voltage", address: 40020, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "V", slave_id: 1 },
+        { id: 6, device_id: 3, name: "Current Draw", address: 40022, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 100.0, unit: "A", slave_id: 1 }
       ];
       setRegisters(mockR.filter(r => r.device_id === deviceId));
     }
@@ -181,7 +334,7 @@ export default function DeviceManager() {
       
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
       const saved = await res.json();
@@ -214,7 +367,7 @@ export default function DeviceManager() {
   const deleteDevice = async (id: number) => {
     if (!confirm("Are you sure you want to delete this device and all its registers?")) return;
     try {
-      await fetch(`${API_URL}/api/devices/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/api/devices/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const nextDevices = devices.filter(d => d.id !== id);
       setDevices(nextDevices);
       setSelectedDevice(nextDevices.length > 0 ? nextDevices[0] : null);
@@ -237,6 +390,7 @@ export default function DeviceManager() {
     setRegUnit("");
     setRegMin("");
     setRegMax("");
+    setRegSlaveId(1);
     setShowRegisterModal(true);
   };
 
@@ -251,6 +405,7 @@ export default function DeviceManager() {
     setRegUnit(reg.unit);
     setRegMin(reg.limit_min !== undefined && reg.limit_min !== null ? reg.limit_min : "");
     setRegMax(reg.limit_max !== undefined && reg.limit_max !== null ? reg.limit_max : "");
+    setRegSlaveId(reg.slave_id || 1);
     setShowRegisterModal(true);
   };
 
@@ -268,7 +423,8 @@ export default function DeviceManager() {
       divisor: Number(regDivisor),
       unit: regUnit,
       limit_min: regMin === "" ? undefined : Number(regMin),
-      limit_max: regMax === "" ? undefined : Number(regMax)
+      limit_max: regMax === "" ? undefined : Number(regMax),
+      slave_id: Number(regSlaveId)
     };
 
     try {
@@ -280,7 +436,7 @@ export default function DeviceManager() {
       
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
       const saved = await res.json();
@@ -309,7 +465,7 @@ export default function DeviceManager() {
   const deleteRegister = async (id: number) => {
     if (!confirm("Are you sure you want to delete this register?")) return;
     try {
-      await fetch(`${API_URL}/api/registers/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/api/registers/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       setRegisters(registers.filter(r => r.id !== id));
     } catch (err) {
       setRegisters(registers.filter(r => r.id !== id));
@@ -326,9 +482,14 @@ export default function DeviceManager() {
             <h1 className="page-title">Device & Register Manager</h1>
             <p className="page-subtitle">Configure Modbus TCP server maps and Serial RTU COM configurations</p>
           </div>
-          <button onClick={openAddDevice} className="btn btn-primary">
-            <Plus size={16} /> Add Device
-          </button>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button onClick={() => setShowScanModal(true)} className="btn btn-secondary" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <Search size={16} /> Scan Network
+            </button>
+            <button onClick={openAddDevice} className="btn btn-primary" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <Plus size={16} /> Add Device
+            </button>
+          </div>
         </header>
 
         <div style={{ display: "flex", gap: "32px", alignItems: "flex-start" }}>
@@ -396,6 +557,7 @@ export default function DeviceManager() {
                       <tr>
                         <th>Register Name</th>
                         <th>Address</th>
+                        <th>Slave ID</th>
                         <th>Type (FC)</th>
                         <th>Data Type</th>
                         <th>Scale</th>
@@ -409,6 +571,7 @@ export default function DeviceManager() {
                         <tr key={r.id}>
                           <td style={{ fontWeight: 600, color: "#fff" }}>{r.name}</td>
                           <td style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>{r.address}</td>
+                          <td style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>{r.slave_id || 1}</td>
                           <td>{r.register_type.split(" ")[0]}</td>
                           <td style={{ fontSize: "13px" }}>{r.data_type}</td>
                           <td>
@@ -442,7 +605,7 @@ export default function DeviceManager() {
 
                       {registers.length === 0 && (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", padding: "32px" }}>
+                          <td colSpan={9} style={{ textAlign: "center", color: "var(--text-muted)", padding: "32px" }}>
                             No registers configured for this device. Click "Add Register" to configure points.
                           </td>
                         </tr>
@@ -554,13 +717,17 @@ export default function DeviceManager() {
 
               <form onSubmit={saveRegister}>
                 <div className="form-row">
-                  <div className="form-group">
+                  <div className="form-group" style={{ flex: 2 }}>
                     <label className="form-label">Register Description Name</label>
                     <input type="text" className="form-control" placeholder="e.g. Temperature" value={regName} onChange={e => setRegName(e.target.value)} required />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Register Address (0-Based Offset)</label>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Address</label>
                     <input type="number" className="form-control" placeholder="e.g. 40001" value={regAddress} onChange={e => setRegAddress(Number(e.target.value))} required />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Slave ID</label>
+                    <input type="number" min={1} max={255} className="form-control" placeholder="1" value={regSlaveId} onChange={e => setRegSlaveId(Number(e.target.value))} required />
                   </div>
                 </div>
 
@@ -618,6 +785,162 @@ export default function DeviceManager() {
                   <button type="submit" className="btn btn-primary">Map Register</button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {showScanModal && (
+          <div className="modal-backdrop">
+            <div className="modal-content" style={{ maxWidth: "600px", width: "100%", background: "var(--bg-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-color)", overflow: "hidden" }}>
+              <div className="modal-header" style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ fontSize: "18px", fontWeight: 700, display: "flex", gap: "8px", alignItems: "center" }}>
+                  <Wifi size={18} style={{ color: "var(--color-secondary)" }} />
+                  Modbus Network Auto-Discovery
+                </h3>
+                <button onClick={() => setShowScanModal(false)} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "24px" }}>
+                {/* Step 1: Scan Subnet */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "20px", borderBottom: "1px solid var(--border-color)" }}>
+                  <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-secondary)", display: "flex", gap: "8px", alignItems: "center" }}>
+                    <span>1.</span> IP Subnet Scan
+                  </h4>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Subnet / Target IP</label>
+                      <input type="text" className="form-control" value={scanSubnet} onChange={e => setScanSubnet(e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Ports (comma-separated)</label>
+                      <input type="text" className="form-control" value={scanPorts} onChange={e => setScanPorts(e.target.value)} />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={startIPScan} 
+                    className="btn btn-primary" 
+                    disabled={scanningIPs}
+                    style={{ alignSelf: "flex-start", gap: "8px", marginTop: "8px" }}
+                  >
+                    {scanningIPs ? <RefreshCw size={16} className="spin" /> : <Search size={16} />}
+                    {scanningIPs ? "Scanning Subnet..." : "Scan Subnet"}
+                  </button>
+
+                  {/* Discovered IPs */}
+                  {discoveredIPs.length > 0 && (
+                    <div style={{ marginTop: "12px" }}>
+                      <label className="form-label">Detected Gateways ({discoveredIPs.length})</label>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
+                        {discoveredIPs.map((dev, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => { setSelectedScanIP(dev); setDetectedSlaves([]); }}
+                            style={{ 
+                              padding: "10px 14px", 
+                              borderRadius: "var(--radius-sm)", 
+                              border: "1px solid", 
+                              borderColor: selectedScanIP?.port === dev.port ? "var(--color-primary)" : "var(--border-color)", 
+                              background: selectedScanIP?.port === dev.port ? "rgba(16, 185, 129, 0.08)" : "rgba(0,0,0,0.15)",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center"
+                            }}
+                          >
+                            <span style={{ fontWeight: 600, color: "#fff" }}>{dev.ip}:{dev.port}</span>
+                            <span className="status-pill online" style={{ fontSize: "11px" }}>Online</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!scanningIPs && discoveredIPs.length === 0 && (
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
+                      Tip: Run your simulated hardware (`python simulator.py`) and scan `127.0.0.1`.
+                    </p>
+                  )}
+                </div>
+
+                {/* Step 2: Scan Slave IDs */}
+                {selectedScanIP && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "20px", borderBottom: "1px solid var(--border-color)" }}>
+                    <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-secondary)", display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span>2.</span> Slave ID Discovery for {selectedScanIP.ip}:{selectedScanIP.port}
+                    </h4>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label className="form-label">Start Slave ID</label>
+                        <input type="number" className="form-control" value={scanStartId} onChange={e => setScanStartId(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">End Slave ID</label>
+                        <input type="number" className="form-control" value={scanEndId} onChange={e => setScanEndId(Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <button 
+                      onClick={startSlaveScan} 
+                      className="btn btn-primary" 
+                      disabled={scanningSlaves}
+                      style={{ alignSelf: "flex-start", gap: "8px", marginTop: "8px" }}
+                    >
+                      {scanningSlaves ? <RefreshCw size={16} className="spin" /> : <Activity size={16} />}
+                      {scanningSlaves ? "Pinging Slave IDs..." : "Ping Slave IDs"}
+                    </button>
+
+                    {/* Detected Slaves */}
+                    {detectedSlaves.length > 0 && (
+                      <div style={{ marginTop: "12px" }}>
+                        <label className="form-label">Active Slave IDs Detected ({detectedSlaves.length})</label>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
+                          {detectedSlaves.map(sid => (
+                            <span 
+                              key={sid} 
+                              style={{ 
+                                padding: "6px 12px", 
+                                borderRadius: "var(--radius-sm)", 
+                                background: "rgba(16, 185, 129, 0.2)", 
+                                color: "var(--color-primary)", 
+                                fontWeight: 700,
+                                border: "1px solid var(--color-primary)",
+                                fontSize: "13px"
+                              }}
+                            >
+                              Slave {sid}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!scanningSlaves && detectedSlaves.length === 0 && (
+                      <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
+                        No active slave IDs queried yet.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 3: Provision Discovered Nodes */}
+                {selectedScanIP && detectedSlaves.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-secondary)", display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span>3.</span> Save and Import Discovered Devices
+                    </h4>
+                    <div className="form-group">
+                      <label className="form-label">Device Name Prefix</label>
+                      <input type="text" className="form-control" value={scanImportName} onChange={e => setScanImportName(e.target.value)} />
+                    </div>
+                    <button 
+                      onClick={importDiscovered} 
+                      className="btn btn-primary"
+                      style={{ marginTop: "8px" }}
+                    >
+                      Provision Discovered Nodes
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

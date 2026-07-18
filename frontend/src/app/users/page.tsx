@@ -6,6 +6,12 @@ import { useAuth } from "@/context/AuthContext";
 import { Plus, User, Trash2, Shield, X } from "lucide-react";
 import { API_URL } from "@/config";
 
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("logger_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 interface UserProfile {
   id: number;
   username: string;
@@ -23,7 +29,7 @@ export default function UserManagement() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/users`);
+      const res = await fetch(`${API_URL}/api/users`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setUsers(data);
@@ -84,7 +90,7 @@ export default function UserManagement() {
     try {
       const res = await fetch(`${API_URL}/api/users`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -115,7 +121,7 @@ export default function UserManagement() {
     if (!confirm(`Are you sure you want to delete user ${username}?`)) return;
 
     try {
-      await fetch(`${API_URL}/api/users/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/api/users/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       setUsers(users.filter(u => u.id !== id));
     } catch (err) {
       setUsers(users.filter(u => u.id !== id));

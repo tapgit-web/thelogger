@@ -15,6 +15,7 @@ interface RegisterReading {
   address: number;
   status: "success" | "error";
   timestamp: string;
+  slave_id?: number;
 }
 
 export default function Dashboard() {
@@ -115,12 +116,12 @@ export default function Dashboard() {
     if (wsStatus === "disconnected" && isPolling) {
       // Simulate real-time data
       const mockRegisters: RegisterReading[] = [
-        { id: 1, name: "Chiller Temperature", device_name: "PLC_Chiller", value: 18.5, unit: "°C", register_type: "Holding Register (FC03)", address: 40001, status: "success", timestamp: new Date().toISOString() },
-        { id: 2, name: "Flow Rate", device_name: "Flowmeter_RTU", value: 125.4, unit: "m³/h", register_type: "Input Register (FC04)", address: 30005, status: "success", timestamp: new Date().toISOString() },
-        { id: 3, name: "Chiller State", device_name: "PLC_Chiller", value: 1, unit: "ON/OFF", register_type: "Discrete Input (FC02)", address: 10001, status: "success", timestamp: new Date().toISOString() },
-        { id: 4, name: "Pressure Limit Alarm", device_name: "PLC_Chiller", value: 0, unit: "Alarm", register_type: "Coil (FC01)", address: 1, status: "success", timestamp: new Date().toISOString() },
-        { id: 5, name: "Main Supply Voltage", device_name: "Energy_Meter", value: 415.2, unit: "V", register_type: "Holding Register (FC03)", address: 40020, status: "success", timestamp: new Date().toISOString() },
-        { id: 6, name: "Current Draw", device_name: "Energy_Meter", value: 34.8, unit: "A", register_type: "Holding Register (FC03)", address: 40022, status: "success", timestamp: new Date().toISOString() }
+        { id: 1, name: "Chiller Temperature", device_name: "PLC_Chiller", value: 18.5, unit: "°C", register_type: "Holding Register (FC03)", address: 40001, status: "success", timestamp: new Date().toISOString(), slave_id: 1 },
+        { id: 2, name: "Flow Rate", device_name: "Flowmeter_RTU", value: 125.4, unit: "m³/h", register_type: "Input Register (FC04)", address: 30005, status: "success", timestamp: new Date().toISOString(), slave_id: 1 },
+        { id: 3, name: "Chiller State", device_name: "PLC_Chiller", value: 1, unit: "ON/OFF", register_type: "Discrete Input (FC02)", address: 10001, status: "success", timestamp: new Date().toISOString(), slave_id: 1 },
+        { id: 4, name: "Pressure Limit Alarm", device_name: "PLC_Chiller", value: 0, unit: "Alarm", register_type: "Coil (FC01)", address: 1, status: "success", timestamp: new Date().toISOString(), slave_id: 1 },
+        { id: 5, name: "Main Supply Voltage", device_name: "Energy_Meter", value: 415.2, unit: "V", register_type: "Holding Register (FC03)", address: 40020, status: "success", timestamp: new Date().toISOString(), slave_id: 1 },
+        { id: 6, name: "Current Draw", device_name: "Energy_Meter", value: 34.8, unit: "A", register_type: "Holding Register (FC03)", address: 40022, status: "success", timestamp: new Date().toISOString(), slave_id: 1 }
       ];
 
       setReadings(mockRegisters);
@@ -216,7 +217,7 @@ export default function Dashboard() {
                 <div>
                   <span className="register-title">{reading.name}</span>
                   <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
-                    Addr: {reading.address} | {reading.register_type.split(" ")[0]}
+                    Addr: {reading.address} | Slave: {reading.slave_id || 1} | {reading.register_type.split(" ")[0]}
                   </div>
                 </div>
                 <span className="device-badge">{reading.device_name}</span>
