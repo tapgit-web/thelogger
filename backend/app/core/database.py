@@ -31,17 +31,17 @@ def run_migrations():
     init_db()
     db = SessionLocal()
     try:
-        # Self-healing migration check for new slave_id column in registers table
+        # Self-healing migration check for new slave_id column in devices table
         try:
-            db.execute(text("SELECT slave_id FROM registers LIMIT 1"))
+            db.execute(text("SELECT slave_id FROM devices LIMIT 1"))
         except Exception:
             db.rollback()
             try:
-                print("Adding slave_id column to registers table...")
-                db.execute(text("ALTER TABLE registers ADD COLUMN slave_id INTEGER DEFAULT 1"))
+                print("Adding slave_id column to devices table...")
+                db.execute(text("ALTER TABLE devices ADD COLUMN slave_id INTEGER DEFAULT 1"))
                 db.commit()
             except Exception as e:
-                print(f"Error adding slave_id column to registers: {e}")
+                print(f"Error adding slave_id column to devices: {e}")
 
         # Check if database has users. If not, try migrating users
         if db.query(DBUser).count() == 0:

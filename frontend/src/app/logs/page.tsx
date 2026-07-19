@@ -213,7 +213,7 @@ export default function LogsView() {
                       <td style={{ color: "var(--text-muted)", fontSize: "13px", fontFamily: "var(--font-mono)" }}>
                         {log.timestamp}
                       </td>
-                      <td style={{ fontWeight: 600, color: "#fff" }}>
+                      <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
                         {log.device_name}
                       </td>
                       <td>
@@ -266,7 +266,7 @@ export default function LogsView() {
                       <td style={{ color: "var(--text-muted)", fontSize: "13px", fontFamily: "var(--font-mono)" }}>
                         {log.timestamp}
                       </td>
-                      <td style={{ fontWeight: 600, color: "#fff" }}>
+                      <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
                         {log.device_name}
                       </td>
                       <td>

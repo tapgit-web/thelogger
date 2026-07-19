@@ -62,7 +62,7 @@ export default function Sidebar() {
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <div style={{ padding: "0 16px", fontSize: "13px" }}>
             <span style={{ color: "var(--text-muted)" }}>Logged in as:</span>
-            <div style={{ fontWeight: 600, color: "#fff", marginTop: "2px" }}>
+            <div style={{ fontWeight: 600, color: "var(--text-primary)", marginTop: "2px" }}>
               {user?.username} ({user?.role})
             </div>
           </div>

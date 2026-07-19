@@ -92,7 +92,7 @@ def write_live_csv(device: DBDevice, register: DBRegister, value: float):
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     clean_ip = (host or device.com_port or "unknown").replace('.', '_').replace(':', '_').replace('/', '_').replace('\\', '_')
-    slave_id = getattr(register, "slave_id", 1)
+    slave_id = getattr(device, "slave_id", 1)
     
     filename = os.path.join(LIVE_LOGS_PATH, f"{clean_ip}_{port_or_baud}_s{slave_id}_{date_str}.csv")
     exists = os.path.exists(filename)
@@ -192,7 +192,7 @@ def check_alarm_limits(device: DBDevice, register: DBRegister, value: float, smt
 def poll_device_registers(client, device: DBDevice, registers: List[DBRegister], smtp_settings: DBEmailSettings):
     # Sort registers by address to optimize read requests if needed
     for reg in registers:
-        slave_id = getattr(reg, "slave_id", 1)
+        slave_id = getattr(device, "slave_id", 1)
         value = None
         status = "failed"
         
@@ -306,7 +306,7 @@ def background_polling_worker(loop):
                             "address": reg.address,
                             "status": "failed",
                             "timestamp": datetime.now().isoformat(),
-                            "slave_id": getattr(reg, "slave_id", 1)
+                            "slave_id": getattr(dev, "slave_id", 1)
                         }
 
             # Broadcast latest telemetry to WebSockets

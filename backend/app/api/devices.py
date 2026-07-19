@@ -23,6 +23,7 @@ class DeviceCreate(BaseModel):
     parity: Optional[str] = None
     bytesize: Optional[int] = None
     stopbits: Optional[int] = None
+    slave_id: int = 1
 
 class RegisterCreate(BaseModel):
     device_id: int
@@ -35,7 +36,6 @@ class RegisterCreate(BaseModel):
     unit: str = ""
     limit_min: Optional[float] = None
     limit_max: Optional[float] = None
-    slave_id: int = 1
 
 @router.get("/api/devices")
 def get_devices(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -56,7 +56,8 @@ def create_device(req: DeviceCreate, db: Session = Depends(get_db), current_user
         baudrate=req.baudrate,
         parity=req.parity,
         bytesize=req.bytesize,
-        stopbits=req.stopbits
+        stopbits=req.stopbits,
+        slave_id=req.slave_id
     )
     db.add(dev)
     db.commit()
@@ -83,6 +84,7 @@ def update_device(id: int, req: DeviceCreate, db: Session = Depends(get_db), cur
     dev.parity = req.parity
     dev.bytesize = req.bytesize
     dev.stopbits = req.stopbits
+    dev.slave_id = req.slave_id
     
     db.commit()
     db.refresh(dev)
@@ -125,8 +127,7 @@ def create_register(req: RegisterCreate, db: Session = Depends(get_db), current_
         divisor=req.divisor,
         unit=req.unit,
         limit_min=req.limit_min,
-        limit_max=req.limit_max,
-        slave_id=req.slave_id
+        limit_max=req.limit_max
     )
     db.add(reg)
     db.commit()
@@ -153,7 +154,6 @@ def update_register(id: int, req: RegisterCreate, db: Session = Depends(get_db),
     reg.unit = req.unit
     reg.limit_min = req.limit_min
     reg.limit_max = req.limit_max
-    reg.slave_id = req.slave_id
     
     db.commit()
     db.refresh(reg)

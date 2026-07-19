@@ -15,7 +15,7 @@ PALETTE = ["#10B981", "#28A745", "#4285F4", "#F29900", "#6F42C1", "#E83E8C", "#2
 def parse_historical_data(device: DBDevice, register: DBRegister, start_dt: datetime, end_dt: datetime) -> List[Dict[str, Any]]:
     host = MODBUS_OVERRIDE_HOST if (device.connection_type == "TCP" and MODBUS_OVERRIDE_HOST) else device.host
     port_or_baud = MODBUS_OVERRIDE_PORT if (device.connection_type == "TCP" and MODBUS_OVERRIDE_PORT) else (device.port or device.baudrate or 0)
-    slave_id = getattr(register, "slave_id", 1)
+    slave_id = getattr(device, "slave_id", 1)
     
     clean_ip = (host or device.com_port or "unknown").replace('.', '_').replace(':', '_').replace('/', '_').replace('\\', '_')
     prefix = f"{clean_ip}_{port_or_baud}_s{slave_id}"

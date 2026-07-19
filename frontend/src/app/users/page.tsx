@@ -156,13 +156,13 @@ export default function UserManagement() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 600, color: "#fff" }}>
+                  <td style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 600, color: "var(--text-primary)" }}>
                     <User size={16} style={{ color: "var(--text-muted)" }} />
                     {u.username}
                   </td>
                   <td>
                     <span className="status-pill" style={{ 
-                      backgroundColor: u.role === "admin" ? "rgba(59, 130, 246, 0.1)" : "rgba(255,255,255,0.03)", 
+                      backgroundColor: u.role === "admin" ? "rgba(59, 130, 246, 0.1)" : "rgba(0,0,0,0.04)", 
                       color: u.role === "admin" ? "var(--color-secondary)" : "var(--text-muted)" 
                     }}>
                       {u.role.toUpperCase()}
@@ -192,7 +192,7 @@ export default function UserManagement() {
             <div className="modal-content">
               <div className="modal-header">
                 <h2 className="page-title" style={{ fontSize: "20px" }}>Create System User</h2>
-                <button onClick={() => setShowModal(false)} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}><X size={20} /></button>
+                <button onClick={() => setShowModal(false)} style={{ background: "transparent", border: "none", color: "var(--text-primary)", cursor: "pointer" }}><X size={20} /></button>
               </div>
 
               {error && (

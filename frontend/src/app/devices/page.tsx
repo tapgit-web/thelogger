@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle, Search, Activity, Wifi, RefreshCw } from "lucide-react";
 import { API_URL } from "@/config";
+import { useAuth } from "@/context/AuthContext";
 
 const getAuthHeaders = (): Record<string, string> => {
   if (typeof window === "undefined") return {};
@@ -22,6 +23,7 @@ interface Device {
   parity?: "N" | "E" | "O";
   bytesize?: number;
   stopbits?: number;
+  slave_id: number;
 }
 
 interface Register {
@@ -36,10 +38,10 @@ interface Register {
   unit: string;
   limit_min?: number;
   limit_max?: number;
-  slave_id: number;
 }
 
 export default function DeviceManager() {
+  const { logout } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [registers, setRegisters] = useState<Register[]>([]);
@@ -61,6 +63,7 @@ export default function DeviceManager() {
   const [rtuParity, setRtuParity] = useState<"N" | "E" | "O">("N");
   const [rtuBytesize, setRtuBytesize] = useState(8);
   const [rtuStopbits, setRtuStopbits] = useState(1);
+  const [deviceSlaveId, setDeviceSlaveId] = useState(1);
 
   // Form Fields for Register
   const [regName, setRegName] = useState("");
@@ -72,7 +75,6 @@ export default function DeviceManager() {
   const [regUnit, setRegUnit] = useState("");
   const [regMin, setRegMin] = useState<number | "">("");
   const [regMax, setRegMax] = useState<number | "">("");
-  const [regSlaveId, setRegSlaveId] = useState(1);
 
   // Scan Wizard States
   const [showScanModal, setShowScanModal] = useState(false);
@@ -152,37 +154,39 @@ export default function DeviceManager() {
   const importDiscovered = async () => {
     if (!selectedScanIP || detectedSlaves.length === 0) return;
     try {
-      const devRes = await fetch(`${API_URL}/api/devices`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify({
-          name: `${scanImportName}_${selectedScanIP.port}`,
-          connection_type: "TCP",
-          host: selectedScanIP.ip,
-          port: selectedScanIP.port
-        })
-      });
-      
-      if (!devRes.ok) {
-        const errData = await devRes.json();
-        alert(errData.detail || "Failed to create device");
-        return;
-      }
-      
-      const newDev = await devRes.json();
-      
       for (const slaveId of detectedSlaves) {
-        await fetch(`${API_URL}/api/devices/${newDev.id}/registers`, {
+        const devRes = await fetch(`${API_URL}/api/devices`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders()
           },
           body: JSON.stringify({
-            name: `Voltage Monitor (S${slaveId})`,
+            name: `${scanImportName}_S${slaveId}_${selectedScanIP.port}`,
+            connection_type: "TCP",
+            host: selectedScanIP.ip,
+            port: selectedScanIP.port,
+            slave_id: slaveId
+          })
+        });
+        
+        if (!devRes.ok) {
+          const errData = await devRes.json();
+          alert(errData.detail || "Failed to create device");
+          continue;
+        }
+        
+        const newDev = await devRes.json();
+        
+        await fetch(`${API_URL}/api/registers`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders()
+          },
+          body: JSON.stringify({
+            device_id: newDev.id,
+            name: `Voltage Monitor`,
             address: 30001,
             register_type: "Input Register (FC04)",
             data_type: "FLOAT32",
@@ -190,8 +194,7 @@ export default function DeviceManager() {
             divisor: 1.0,
             unit: "V",
             limit_min: 210,
-            limit_max: 250,
-            slave_id: slaveId
+            limit_max: 250
           })
         });
       }
@@ -208,7 +211,7 @@ export default function DeviceManager() {
     try {
       const res = await fetch(`${API_URL}/api/devices`, { headers: getAuthHeaders() });
       if (res.status === 401) {
-        window.location.href = "/login";
+        logout();
         return;
       }
       const data = await res.json();
@@ -224,9 +227,9 @@ export default function DeviceManager() {
       console.error("Error fetching devices:", err);
       // Mock data for static verification/fallback
       const mockD: Device[] = [
-        { id: 1, name: "PLC_Chiller", connection_type: "TCP", host: "192.168.1.50", port: 502 },
-        { id: 2, name: "Flowmeter_RTU", connection_type: "RTU", com_port: "COM3", baudrate: 9600, parity: "N", bytesize: 8, stopbits: 1 },
-        { id: 3, name: "Energy_Meter", connection_type: "TCP", host: "192.168.1.55", port: 502 }
+        { id: 1, name: "PLC_Chiller", connection_type: "TCP", host: "192.168.1.50", port: 502, slave_id: 1 },
+        { id: 2, name: "Flowmeter_RTU", connection_type: "RTU", com_port: "COM3", baudrate: 9600, parity: "N", bytesize: 8, stopbits: 1, slave_id: 1 },
+        { id: 3, name: "Energy_Meter", connection_type: "TCP", host: "192.168.1.55", port: 502, slave_id: 1 }
       ];
       setDevices(mockD);
       if (mockD.length > 0 && !selectedDevice) {
@@ -241,7 +244,7 @@ export default function DeviceManager() {
     try {
       const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`, { headers: getAuthHeaders() });
       if (res.status === 401) {
-        window.location.href = "/login";
+        logout();
         return;
       }
       const data = await res.json();
@@ -254,12 +257,12 @@ export default function DeviceManager() {
       console.error("Error fetching registers:", err);
       // Mock registers
       const mockR: Register[] = [
-        { id: 1, device_id: 1, name: "Chiller Temperature", address: 40001, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "°C", limit_min: 5, limit_max: 35, slave_id: 1 },
-        { id: 2, device_id: 1, name: "Chiller State", address: 10001, register_type: "Discrete Input (FC02)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "ON/OFF", slave_id: 1 },
-        { id: 3, device_id: 1, name: "Pressure Limit Alarm", address: 1, register_type: "Coil (FC01)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "Alarm", slave_id: 1 },
-        { id: 4, device_id: 2, name: "Flow Rate", address: 30005, register_type: "Input Register (FC04)", data_type: "FLOAT32", multiplier: 1.0, divisor: 1.0, unit: "m³/h", limit_max: 200, slave_id: 1 },
-        { id: 5, device_id: 3, name: "Main Supply Voltage", address: 40020, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "V", slave_id: 1 },
-        { id: 6, device_id: 3, name: "Current Draw", address: 40022, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 100.0, unit: "A", slave_id: 1 }
+        { id: 1, device_id: 1, name: "Chiller Temperature", address: 40001, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "°C", limit_min: 5, limit_max: 35 },
+        { id: 2, device_id: 1, name: "Chiller State", address: 10001, register_type: "Discrete Input (FC02)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "ON/OFF" },
+        { id: 3, device_id: 1, name: "Pressure Limit Alarm", address: 1, register_type: "Coil (FC01)", data_type: "INT16", multiplier: 1, divisor: 1, unit: "Alarm" },
+        { id: 4, device_id: 2, name: "Flow Rate", address: 30005, register_type: "Input Register (FC04)", data_type: "FLOAT32", multiplier: 1.0, divisor: 1.0, unit: "m³/h", limit_max: 200 },
+        { id: 5, device_id: 3, name: "Main Supply Voltage", address: 40020, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 10.0, unit: "V" },
+        { id: 6, device_id: 3, name: "Current Draw", address: 40022, register_type: "Holding Register (FC03)", data_type: "FLOAT32", multiplier: 1.0, divisor: 100.0, unit: "A" }
       ];
       setRegisters(mockR.filter(r => r.device_id === deviceId));
     }
@@ -288,6 +291,7 @@ export default function DeviceManager() {
     setRtuParity("N");
     setRtuBytesize(8);
     setRtuStopbits(1);
+    setDeviceSlaveId(1);
     setShowDeviceModal(true);
   };
 
@@ -305,6 +309,7 @@ export default function DeviceManager() {
       setRtuBytesize(dev.bytesize || 8);
       setRtuStopbits(dev.stopbits || 1);
     }
+    setDeviceSlaveId(dev.slave_id || 1);
     setShowDeviceModal(true);
   };
 
@@ -314,7 +319,8 @@ export default function DeviceManager() {
       name: deviceName,
       connection_type: "TCP",
       host: tcpHost,
-      port: tcpPort
+      port: tcpPort,
+      slave_id: Number(deviceSlaveId)
     } : {
       name: deviceName,
       connection_type: "RTU",
@@ -322,7 +328,8 @@ export default function DeviceManager() {
       baudrate: rtuBaud,
       parity: rtuParity,
       bytesize: rtuBytesize,
-      stopbits: rtuStopbits
+      stopbits: rtuStopbits,
+      slave_id: Number(deviceSlaveId)
     };
 
     try {
@@ -390,7 +397,6 @@ export default function DeviceManager() {
     setRegUnit("");
     setRegMin("");
     setRegMax("");
-    setRegSlaveId(1);
     setShowRegisterModal(true);
   };
 
@@ -405,7 +411,6 @@ export default function DeviceManager() {
     setRegUnit(reg.unit);
     setRegMin(reg.limit_min !== undefined && reg.limit_min !== null ? reg.limit_min : "");
     setRegMax(reg.limit_max !== undefined && reg.limit_max !== null ? reg.limit_max : "");
-    setRegSlaveId(reg.slave_id || 1);
     setShowRegisterModal(true);
   };
 
@@ -423,8 +428,7 @@ export default function DeviceManager() {
       divisor: Number(regDivisor),
       unit: regUnit,
       limit_min: regMin === "" ? undefined : Number(regMin),
-      limit_max: regMax === "" ? undefined : Number(regMax),
-      slave_id: Number(regSlaveId)
+      limit_max: regMax === "" ? undefined : Number(regMax)
     };
 
     try {
@@ -516,9 +520,9 @@ export default function DeviceManager() {
                 <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                   <Cpu size={20} style={{ color: d.connection_type === "TCP" ? "var(--color-secondary)" : "var(--color-warning)" }} />
                   <div>
-                    <h4 style={{ fontSize: "15px", fontWeight: 600, color: "#fff" }}>{d.name}</h4>
+                    <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>{d.name}</h4>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {d.connection_type === "TCP" ? `TCP: ${d.host}:${d.port}` : `RTU: ${d.com_port} @ ${d.baudrate}`}
+                      {d.connection_type === "TCP" ? `TCP: ${d.host}:${d.port} (Slave: ${d.slave_id || 1})` : `RTU: ${d.com_port} @ ${d.baudrate} (Slave: ${d.slave_id || 1})`}
                     </span>
                   </div>
                 </div>
@@ -543,7 +547,7 @@ export default function DeviceManager() {
             {selectedDevice ? (
               <div>
                 <div className="flex-between" style={{ marginBottom: "16px" }}>
-                  <h3 style={{ fontSize: "18px", color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h3 style={{ fontSize: "18px", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
                     <FileText size={18} style={{ color: "var(--color-primary)" }} /> Configured Registers for <span style={{ color: "var(--color-primary)" }}>{selectedDevice.name}</span>
                   </h3>
                   <button onClick={openAddRegister} className="btn btn-secondary">
@@ -569,9 +573,9 @@ export default function DeviceManager() {
                     <tbody>
                       {registers.map((r) => (
                         <tr key={r.id}>
-                          <td style={{ fontWeight: 600, color: "#fff" }}>{r.name}</td>
+                          <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{r.name}</td>
                           <td style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>{r.address}</td>
-                          <td style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>{r.slave_id || 1}</td>
+                          <td style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>{selectedDevice?.slave_id || 1}</td>
                           <td>{r.register_type.split(" ")[0]}</td>
                           <td style={{ fontSize: "13px" }}>{r.data_type}</td>
                           <td>
@@ -630,7 +634,7 @@ export default function DeviceManager() {
             <div className="modal-content">
               <div className="modal-header">
                 <h2 className="page-title" style={{ fontSize: "20px" }}>{editingDevice ? "Edit Device Config" : "Add Modbus Device Node"}</h2>
-                <button onClick={() => setShowDeviceModal(false)} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}><X size={20} /></button>
+                <button onClick={() => setShowDeviceModal(false)} style={{ background: "transparent", border: "none", color: "var(--text-primary)", cursor: "pointer" }}><X size={20} /></button>
               </div>
 
               <form onSubmit={saveDevice}>
@@ -697,6 +701,11 @@ export default function DeviceManager() {
                   </div>
                 )}
 
+                <div className="form-group" style={{ marginTop: "12px" }}>
+                  <label className="form-label">Slave ID</label>
+                  <input type="number" min={1} max={255} className="form-control" placeholder="1" value={deviceSlaveId} onChange={e => setDeviceSlaveId(Number(e.target.value))} required />
+                </div>
+
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px" }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowDeviceModal(false)}>Cancel</button>
                   <button type="submit" className="btn btn-primary">Save Node</button>
@@ -712,22 +721,18 @@ export default function DeviceManager() {
             <div className="modal-content" style={{ maxWidth: "600px" }}>
               <div className="modal-header">
                 <h2 className="page-title" style={{ fontSize: "20px" }}>{editingRegister ? "Edit Register Mapping" : "Map Modbus Register Point"}</h2>
-                <button onClick={() => setShowRegisterModal(false)} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}><X size={20} /></button>
+                <button onClick={() => setShowRegisterModal(false)} style={{ background: "transparent", border: "none", color: "var(--text-primary)", cursor: "pointer" }}><X size={20} /></button>
               </div>
 
               <form onSubmit={saveRegister}>
                 <div className="form-row">
-                  <div className="form-group" style={{ flex: 2 }}>
+                  <div className="form-group" style={{ flex: 3 }}>
                     <label className="form-label">Register Description Name</label>
                     <input type="text" className="form-control" placeholder="e.g. Temperature" value={regName} onChange={e => setRegName(e.target.value)} required />
                   </div>
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">Address</label>
                     <input type="number" className="form-control" placeholder="e.g. 40001" value={regAddress} onChange={e => setRegAddress(Number(e.target.value))} required />
-                  </div>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Slave ID</label>
-                    <input type="number" min={1} max={255} className="form-control" placeholder="1" value={regSlaveId} onChange={e => setRegSlaveId(Number(e.target.value))} required />
                   </div>
                 </div>
 
@@ -797,7 +802,7 @@ export default function DeviceManager() {
                   <Wifi size={18} style={{ color: "var(--color-secondary)" }} />
                   Modbus Network Auto-Discovery
                 </h3>
-                <button onClick={() => setShowScanModal(false)} style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}>
+                <button onClick={() => setShowScanModal(false)} style={{ background: "transparent", border: "none", color: "var(--text-primary)", cursor: "pointer" }}>
                   <X size={20} />
                 </button>
               </div>
@@ -849,7 +854,7 @@ export default function DeviceManager() {
                               alignItems: "center"
                             }}
                           >
-                            <span style={{ fontWeight: 600, color: "#fff" }}>{dev.ip}:{dev.port}</span>
+                            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{dev.ip}:{dev.port}</span>
                             <span className="status-pill online" style={{ fontSize: "11px" }}>Online</span>
                           </div>
                         ))}

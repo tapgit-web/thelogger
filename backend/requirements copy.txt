@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pymodbus==2.5.3
+reportlab
+requests
+pydantic
+pydantic-settings
+sqlalchemy
+python-dotenv
+psycopg2-binary
+pyjwt
+

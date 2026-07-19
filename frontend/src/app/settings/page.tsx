@@ -153,7 +153,7 @@ export default function SettingsView() {
           
           {/* SMTP Configuration */}
           <section className="card">
-            <h3 style={{ fontSize: "18px", color: "#fff", display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
+            <h3 style={{ fontSize: "18px", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" }}>
               <Mail size={20} style={{ color: "var(--color-primary)" }} /> Outbound Email SMTP Server Settings
             </h3>
             
@@ -214,7 +214,7 @@ export default function SettingsView() {
 
           {/* Security & Obfuscation Parameters */}
           <section className="card">
-            <h3 style={{ fontSize: "18px", color: "#fff", display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+            <h3 style={{ fontSize: "18px", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <Shield size={20} style={{ color: "var(--color-warning)" }} /> Hardware Security & Obfuscation Info
             </h3>
             <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "20px", maxWidth: "800px" }}>
@@ -222,11 +222,11 @@ export default function SettingsView() {
             </p>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div className="flex-between" style={{ background: "rgba(0,0,0,0.2)", padding: "12px 20px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+              <div className="flex-between" style={{ background: "var(--bg-main)", padding: "12px 20px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
                 <span style={{ fontSize: "14px", fontWeight: 600 }}>Local Config Obfuscation Status</span>
                 <span className="status-pill online" style={{ fontSize: "12px" }}>ACTIVE (AES/XOR-256)</span>
               </div>
-              <div className="flex-between" style={{ background: "rgba(0,0,0,0.2)", padding: "12px 20px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+              <div className="flex-between" style={{ background: "var(--bg-main)", padding: "12px 20px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
                 <span style={{ fontSize: "14px", fontWeight: 600 }}>Web Licenser License Status</span>
                 <span className="status-pill online" style={{ fontSize: "12px" }}>VALID LIFETIME ACTIVATED</span>
               </div>
