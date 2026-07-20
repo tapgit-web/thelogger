@@ -12,7 +12,7 @@ module.exports = {
       name: "thelogger-backend",
       cwd: "./backend",
       script: "main.py",
-      interpreter: "./.venv/bin/python", // Virtual environment Python executable
+      interpreter: "./.venv/bin/python", // Relative to cwd (./backend/.venv/bin/python)
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
