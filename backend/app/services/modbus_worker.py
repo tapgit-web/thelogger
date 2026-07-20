@@ -310,7 +310,7 @@ def background_polling_worker(loop):
                         }
 
             # Broadcast latest telemetry to WebSockets
-            if latest_readings:
+            if latest_readings and loop and loop.is_running():
                 payload = {
                     "type": "telemetry",
                     "is_polling": is_polling,
@@ -328,12 +328,17 @@ def background_polling_worker(loop):
         
     print("Background polling worker stopped.")
 
-def start_polling(loop):
-    global is_polling, polling_thread
+main_event_loop = None
+
+def start_polling(loop=None):
+    global is_polling, polling_thread, main_event_loop
+    if loop is not None:
+        main_event_loop = loop
     if is_polling:
         return
     is_polling = True
-    polling_thread = threading.Thread(target=background_polling_worker, args=(loop,), daemon=True)
+    target_loop = loop or main_event_loop
+    polling_thread = threading.Thread(target=background_polling_worker, args=(target_loop,), daemon=True)
     polling_thread.start()
 
 def stop_polling():

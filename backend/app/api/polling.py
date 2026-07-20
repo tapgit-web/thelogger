@@ -6,11 +6,15 @@ import app.services.modbus_worker as worker
 router = APIRouter(tags=["polling"])
 
 @router.post("/api/polling/toggle")
-def toggle_polling():
+async def toggle_polling():
     if worker.is_polling:
         worker.stop_polling()
     else:
-        worker.start_polling(asyncio.get_event_loop())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        worker.start_polling(loop)
     return {"is_polling": worker.is_polling}
 
 @router.websocket("/api/ws/live")

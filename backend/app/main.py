@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
     # Run DB schema migrations and config copy from desktop app
     run_migrations()
     # Auto-start polling on startup
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     start_polling(loop)
     print("FastAPI startup finished: Database initialized and Modbus polling started.")
     yield
@@ -28,6 +28,7 @@ app = FastAPI(title="THE LOGGER Backend Server", version="2.0.0", lifespan=lifes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

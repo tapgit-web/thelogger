@@ -79,16 +79,43 @@ export default function DeviceManager() {
   // Scan Wizard States
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanSubnet, setScanSubnet] = useState("127.0.0.1");
-  const [scanPorts, setScanPorts] = useState("5020, 5021");
+  const [scanPorts, setScanPorts] = useState("502, 5020, 5021");
+  const [detectedInterfaces, setDetectedInterfaces] = useState<{ name: string; ip: string; subnet: string; is_primary: boolean }[]>([]);
+  const [loadingNetInfo, setLoadingNetInfo] = useState(false);
   const [scanningIPs, setScanningIPs] = useState(false);
-  const [discoveredIPs, setDiscoveredIPs] = useState<{ ip: string; port: number }[]>([]);
-  const [selectedScanIP, setSelectedScanIP] = useState<{ ip: string; port: number } | null>(null);
+  const [discoveredIPs, setDiscoveredIPs] = useState<{ ip: string; port: number; latency_ms?: number }[]>([]);
+  const [selectedScanIP, setSelectedScanIP] = useState<{ ip: string; port: number; latency_ms?: number } | null>(null);
   
   const [scanningSlaves, setScanningSlaves] = useState(false);
   const [detectedSlaves, setDetectedSlaves] = useState<number[]>([]);
   const [scanStartId, setScanStartId] = useState(1);
-  const [scanEndId, setScanEndId] = useState(5);
+  const [scanEndId, setScanEndId] = useState(10);
   const [scanImportName, setScanImportName] = useState("PLC_Sim");
+
+  const fetchNetInfo = async () => {
+    setLoadingNetInfo(true);
+    try {
+      const res = await fetch(`${API_URL}/api/scan/net-info`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.interfaces && data.interfaces.length > 0) {
+          setDetectedInterfaces(data.interfaces);
+        }
+        if (data.primary_subnet) {
+          setScanSubnet(data.primary_subnet);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch net info:", err);
+    } finally {
+      setLoadingNetInfo(false);
+    }
+  };
+
+  const openScanModal = () => {
+    setShowScanModal(true);
+    fetchNetInfo();
+  };
 
   const startIPScan = async () => {
     setScanningIPs(true);
@@ -105,7 +132,7 @@ export default function DeviceManager() {
         },
         body: JSON.stringify({
           subnet: scanSubnet,
-          ports: portList.length > 0 ? portList : [5020, 5021]
+          ports: portList.length > 0 ? portList : [502, 5020, 5021]
         })
       });
       if (res.ok) {
@@ -487,7 +514,7 @@ export default function DeviceManager() {
             <p className="page-subtitle">Configure Modbus TCP server maps and Serial RTU COM configurations</p>
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
-            <button onClick={() => setShowScanModal(true)} className="btn btn-secondary" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button onClick={openScanModal} className="btn btn-secondary" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <Search size={16} /> Scan Network
             </button>
             <button onClick={openAddDevice} className="btn btn-primary" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -810,13 +837,60 @@ export default function DeviceManager() {
               <div className="modal-body" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "24px" }}>
                 {/* Step 1: Scan Subnet */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "20px", borderBottom: "1px solid var(--border-color)" }}>
-                  <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-secondary)", display: "flex", gap: "8px", alignItems: "center" }}>
-                    <span>1.</span> IP Subnet Scan
-                  </h4>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h4 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-secondary)", display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span>1.</span> IP Subnet Scan
+                    </h4>
+                    <button 
+                      onClick={fetchNetInfo} 
+                      style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", fontSize: "12px", display: "flex", gap: "4px", alignItems: "center" }}
+                      title="Refresh Network Interfaces"
+                    >
+                      <RefreshCw size={12} className={loadingNetInfo ? "spin" : ""} /> Refresh Net Interfaces
+                    </button>
+                  </div>
+
+                  {/* Detected Interface Selection Chips */}
+                  {detectedInterfaces.length > 0 && (
+                    <div style={{ background: "var(--bg-main)", padding: "12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+                      <label className="form-label" style={{ marginBottom: "8px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
+                        Select Detected Network Subnet
+                      </label>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {detectedInterfaces.map((iface, idx) => {
+                          const isSelected = scanSubnet === iface.subnet || scanSubnet === iface.ip;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setScanSubnet(iface.subnet)}
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "var(--radius-sm)",
+                                fontSize: "12px",
+                                fontWeight: isSelected ? 600 : 400,
+                                border: isSelected ? "1px solid var(--color-primary)" : "1px solid var(--border-color)",
+                                background: isSelected ? "rgba(16, 185, 129, 0.12)" : "var(--bg-card)",
+                                color: isSelected ? "var(--color-primary)" : "var(--text-primary)",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px"
+                              }}
+                            >
+                              <Wifi size={12} />
+                              {iface.name} {iface.is_primary ? "(Auto)" : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">Subnet / Target IP</label>
-                      <input type="text" className="form-control" value={scanSubnet} onChange={e => setScanSubnet(e.target.value)} />
+                      <input type="text" className="form-control" placeholder="e.g. 192.168.0 or 127.0.0.1" value={scanSubnet} onChange={e => setScanSubnet(e.target.value)} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Ports (comma-separated)</label>
@@ -836,28 +910,51 @@ export default function DeviceManager() {
                   {/* Discovered IPs */}
                   {discoveredIPs.length > 0 && (
                     <div style={{ marginTop: "12px" }}>
-                      <label className="form-label">Detected Gateways ({discoveredIPs.length})</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
-                        {discoveredIPs.map((dev, idx) => (
-                          <div 
-                            key={idx} 
-                            onClick={() => { setSelectedScanIP(dev); setDetectedSlaves([]); }}
-                            style={{ 
-                              padding: "10px 14px", 
-                              borderRadius: "var(--radius-sm)", 
-                              border: "1px solid", 
-                              borderColor: selectedScanIP?.port === dev.port ? "var(--color-primary)" : "var(--border-color)", 
-                              background: selectedScanIP?.port === dev.port ? "rgba(16, 185, 129, 0.08)" : "rgba(0,0,0,0.15)",
-                              cursor: "pointer",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center"
-                            }}
-                          >
-                            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{dev.ip}:{dev.port}</span>
-                            <span className="status-pill online" style={{ fontSize: "11px" }}>Online</span>
-                          </div>
-                        ))}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <label className="form-label" style={{ margin: 0, fontWeight: 600 }}>
+                          Detected Online Gateways ({discoveredIPs.length})
+                        </label>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                          Click a gateway below to scan slave IDs
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px", maxHeight: "220px", overflowY: "auto", paddingRight: "4px" }}>
+                        {discoveredIPs.map((dev, idx) => {
+                          const isSelected = selectedScanIP?.ip === dev.ip && selectedScanIP?.port === dev.port;
+                          return (
+                            <div 
+                              key={idx} 
+                              onClick={() => { setSelectedScanIP(dev); setDetectedSlaves([]); }}
+                              style={{ 
+                                padding: "10px 12px", 
+                                borderRadius: "var(--radius-md)", 
+                                border: "1px solid", 
+                                borderColor: isSelected ? "var(--color-primary)" : "var(--border-color)", 
+                                background: isSelected ? "rgba(16, 185, 129, 0.1)" : "var(--bg-main)",
+                                cursor: "pointer",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontWeight: 700, fontSize: "13px", color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
+                                  {dev.ip}
+                                </span>
+                                <span className="status-pill online" style={{ fontSize: "10px", padding: "2px 6px" }}>Online</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-muted)" }}>
+                                <span>Port: <strong style={{ color: "var(--text-primary)" }}>{dev.port}</strong></span>
+                                {dev.latency_ms !== undefined && (
+                                  <span style={{ color: "var(--color-primary)", fontWeight: 500 }}>
+                                    ⚡ {dev.latency_ms} ms
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
