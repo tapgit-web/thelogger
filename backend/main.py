@@ -9,4 +9,5 @@ from app.main import app
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host=SERVER_HOST, port=SERVER_PORT, reload=True)
+    use_reload = os.environ.get("RELOAD", "false").lower() in ("true", "1")
+    uvicorn.run("app.main:app", host=SERVER_HOST, port=SERVER_PORT, reload=use_reload)

@@ -12,13 +12,20 @@ module.exports = {
       name: "thelogger-backend",
       cwd: "./backend",
       script: "main.py",
-      interpreter: "./.venv/bin/python", // Linux production venv (Use "./.venv/Scripts/python.exe" for Windows PM2)
+      interpreter: "./.venv/bin/python", // Virtual environment Python executable
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      env: {
+        NODE_ENV: "production",
+        PYTHONUNBUFFERED: "1",
+        RELOAD: "false",
+        PORT: 8000
+      },
       env_production: {
         NODE_ENV: "production",
         PYTHONUNBUFFERED: "1",
+        RELOAD: "false",
         PORT: 8000
       }
     },
@@ -34,6 +41,10 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      env: {
+        NODE_ENV: "production",
+        PORT: 3000
+      },
       env_production: {
         NODE_ENV: "production",
         PORT: 3000
