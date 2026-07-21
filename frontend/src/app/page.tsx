@@ -25,7 +25,7 @@ export default function Home() {
       backgroundColor: "var(--bg-main)",
       color: "var(--text-muted)"
     }}>
-      Loading THE LOGGER...
+      Loading M-OBSERVER...
     </div>
   );
 }

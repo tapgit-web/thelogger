@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import { Play, Square, Activity, Database, AlertCircle, RefreshCw } from "lucide-react";
 import { API_URL, WS_URL } from "@/config";
 
@@ -150,7 +150,7 @@ export default function Dashboard() {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
       
       <main className="main-content">
         <header className="page-header">

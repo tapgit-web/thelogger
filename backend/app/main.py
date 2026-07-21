@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     stop_polling()
     print("FastAPI server shut down: Modbus polling stopped.")
 
-app = FastAPI(title="THE LOGGER Backend Server", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="M-OBSERVER Backend Server", version="2.0.0", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(

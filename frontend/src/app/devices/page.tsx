@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle, Search, Activity, Wifi, RefreshCw } from "lucide-react";
+import Navbar from "@/components/Navbar";
+import { Plus, Edit, Trash2, Cpu, FileText, ChevronRight, X, AlertTriangle, Search, Activity, Wifi, RefreshCw, Upload, Download } from "lucide-react";
 import { API_URL } from "@/config";
 import { useAuth } from "@/context/AuthContext";
+import * as XLSX from "xlsx";
 
 const getAuthHeaders = (): Record<string, string> => {
   if (typeof window === "undefined") return {};
@@ -493,6 +494,129 @@ export default function DeviceManager() {
     }
   };
 
+  const downloadExcel = () => {
+    if (!selectedDevice) return;
+    
+    const data = registers.map(r => ({
+      "Name": r.name,
+      "Address": r.address,
+      "Register Type": r.register_type,
+      "Data Type": r.data_type,
+      "Multiplier": r.multiplier,
+      "Divisor": r.divisor,
+      "Unit": r.unit,
+      "Limit Min": r.limit_min !== undefined && r.limit_min !== null ? r.limit_min : "",
+      "Limit Max": r.limit_max !== undefined && r.limit_max !== null ? r.limit_max : ""
+    }));
+
+    if (data.length === 0) {
+      data.push({
+        "Name": "Voltage example",
+        "Address": 40001,
+        "Register Type": "Holding Register (FC03)",
+        "Data Type": "FLOAT32",
+        "Multiplier": 1.0,
+        "Divisor": 1.0,
+        "Unit": "V",
+        "Limit Min": 0,
+        "Limit Max": 500
+      });
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registers");
+    XLSX.writeFile(workbook, `${selectedDevice.name.replace(/\s+/g, "_")}_registers.xlsx`);
+  };
+
+  const triggerExcelUpload = () => {
+    if (!selectedDevice) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx, .xls";
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const workbook = XLSX.read(bstr, { type: "binary" });
+          const worksheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[worksheetName];
+          const rawData = XLSX.utils.sheet_to_json(worksheet) as any[];
+          
+          if (!rawData || rawData.length === 0) {
+            alert("The uploaded file is empty or invalid.");
+            return;
+          }
+          
+          const mapped = rawData.map((row: any, idx) => {
+            const name = row["Name"] || row["name"] || `Register_${idx + 1}`;
+            const address = parseInt(row["Address"] || row["address"]);
+            const register_type = row["Register Type"] || row["register_type"] || "Holding Register (FC03)";
+            const data_type = row["Data Type"] || row["data_type"] || "FLOAT32";
+            const multiplier = parseFloat(row["Multiplier"] || row["multiplier"] || "1.0");
+            const divisor = parseFloat(row["Divisor"] || row["divisor"] || "1.0");
+            const unit = row["Unit"] || row["unit"] || "";
+            
+            const limitMinRaw = row["Limit Min"] || row["limit_min"];
+            const limit_min = limitMinRaw !== undefined && limitMinRaw !== "" ? parseFloat(limitMinRaw) : undefined;
+            
+            const limitMaxRaw = row["Limit Max"] || row["limit_max"];
+            const limit_max = limitMaxRaw !== undefined && limitMaxRaw !== "" ? parseFloat(limitMaxRaw) : undefined;
+            
+            if (isNaN(address)) {
+              throw new Error(`Row ${idx + 1} has an invalid or missing Address.`);
+            }
+            
+            return {
+              name,
+              address,
+              register_type,
+              data_type,
+              multiplier,
+              divisor,
+              unit,
+              limit_min,
+              limit_max
+            };
+          });
+          
+          const clearExisting = confirm(
+            `Found ${mapped.length} registers in the sheet.\n\nClick "OK" to CLEAR existing registers and replace them.\nClick "Cancel" to APPEND these registers to the existing list.`
+          );
+          
+          const res = await fetch(`${API_URL}/api/devices/${selectedDevice.id}/registers/bulk?clear_existing=${clearExisting}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...getAuthHeaders()
+            },
+            body: JSON.stringify(mapped)
+          });
+          
+          if (res.ok) {
+            alert(`Successfully imported ${mapped.length} registers.`);
+            const regRes = await fetch(`${API_URL}/api/devices/${selectedDevice.id}/registers`, { headers: getAuthHeaders() });
+            if (regRes.ok) {
+              const updatedRegs = await regRes.json();
+              setRegisters(updatedRegs);
+            }
+          } else {
+            const errData = await res.json();
+            alert(`Failed to import: ${errData.detail || "Unknown error"}`);
+          }
+        } catch (err: any) {
+          alert(`Error reading Excel: ${err.message}`);
+        }
+      };
+      reader.readAsBinaryString(file);
+    };
+    input.click();
+  };
+
   const deleteRegister = async (id: number) => {
     if (!confirm("Are you sure you want to delete this register?")) return;
     try {
@@ -505,7 +629,7 @@ export default function DeviceManager() {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
 
       <main className="main-content">
         <header className="page-header">
@@ -577,9 +701,17 @@ export default function DeviceManager() {
                   <h3 style={{ fontSize: "18px", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
                     <FileText size={18} style={{ color: "var(--color-primary)" }} /> Configured Registers for <span style={{ color: "var(--color-primary)" }}>{selectedDevice.name}</span>
                   </h3>
-                  <button onClick={openAddRegister} className="btn btn-secondary">
-                    <Plus size={16} /> Add Register
-                  </button>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button onClick={triggerExcelUpload} className="btn btn-secondary" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <Upload size={14} /> Upload Excel
+                    </button>
+                    <button onClick={downloadExcel} className="btn btn-secondary" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <Download size={14} /> Download Excel
+                    </button>
+                    <button onClick={openAddRegister} className="btn btn-primary" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <Plus size={16} /> Add Register
+                    </button>
+                  </div>
                 </div>
 
                 <div className="table-container">
@@ -822,7 +954,7 @@ export default function DeviceManager() {
         )}
 
         {showScanModal && (
-          <div className="modal-backdrop">
+          <div className="modal-overlay">
             <div className="modal-content" style={{ maxWidth: "600px", width: "100%", background: "var(--bg-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-color)", overflow: "hidden" }}>
               <div className="modal-header" style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h3 style={{ fontSize: "18px", fontWeight: 700, display: "flex", gap: "8px", alignItems: "center" }}>

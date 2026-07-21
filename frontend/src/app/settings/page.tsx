@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import { Mail, Shield, Save, Play, CheckCircle, AlertCircle } from "lucide-react";
 import { API_URL } from "@/config";
 
@@ -121,7 +121,7 @@ export default function SettingsView() {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
 
       <main className="main-content">
         <header className="page-header">
@@ -218,7 +218,7 @@ export default function SettingsView() {
               <Shield size={20} style={{ color: "var(--color-warning)" }} /> Hardware Security & Obfuscation Info
             </h3>
             <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "20px", maxWidth: "800px" }}>
-              THE LOGGER employs a local base64-XOR obfuscation pattern combined with your hardware's unique Hardware ID (HWID) to lock configuration schemas locally.
+              M-OBSERVER employs a local base64-XOR obfuscation pattern combined with your hardware's unique Hardware ID (HWID) to lock configuration schemas locally.
             </p>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

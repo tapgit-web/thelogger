@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import { useAuth } from "@/context/AuthContext";
 import { Plus, User, Trash2, Shield, X } from "lucide-react";
 import { API_URL } from "@/config";
@@ -52,7 +52,7 @@ export default function UserManagement() {
   if (user?.role !== "admin") {
     return (
       <div className="app-container">
-        <Sidebar />
+        <Navbar />
         <main className="main-content" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "80vh" }}>
           <div className="card" style={{ textAlign: "center", maxWidth: "450px" }}>
             <Shield size={48} style={{ color: "var(--color-danger)", marginBottom: "16px" }} />
@@ -130,7 +130,7 @@ export default function UserManagement() {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
 
       <main className="main-content">
         <header className="page-header">

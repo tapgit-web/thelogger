@@ -53,7 +53,7 @@ def test_email(req: EmailSettingsUpdate, current_user = Depends(get_admin_user))
         receiver_email=req.receiver_email
     )
     ok = send_email(
-        subject="THE LOGGER - SMTP Configuration Test Alert",
+        subject="M-OBSERVER - SMTP Configuration Test Alert",
         body="Congratulations! Your SMTP email alerts settings are correctly configured.",
         settings=settings
     )

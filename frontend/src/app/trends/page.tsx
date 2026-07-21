@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import { 
   LineChart, 
   Line, 
@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
   ReferenceLine
 } from "recharts";
-import { FileDown, Calendar, Search, Activity, HelpCircle } from "lucide-react";
+import { FileDown, Calendar, Search, Activity, HelpCircle, ChevronDown } from "lucide-react";
 import { API_URL } from "@/config";
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -21,6 +21,8 @@ const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem("logger_token");
   return token ? { "Authorization": `Bearer ${token}` } : {};
 };
+
+const PALETTE = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"];
 
 interface Device {
   id: number;
@@ -45,12 +47,13 @@ export default function TrendsView() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<number | "">("");
-  const [selectedRegister, setSelectedRegister] = useState<number | "">("");
+  const [selectedRegisters, setSelectedRegisters] = useState<number[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
   
-  const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
-  const [stats, setStats] = useState({ min: 0, max: 0, avg: 0 });
+  const [trendData, setTrendData] = useState<any[]>([]);
+  const [registerStats, setRegisterStats] = useState<Record<number, { min: number; max: number; avg: number }>>({});
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -77,9 +80,9 @@ export default function TrendsView() {
       const listReg = await res.json();
       setRegisters(listReg);
       if (listReg.length > 0) {
-        setSelectedRegister(listReg[0].id);
+        setSelectedRegisters([listReg[0].id]);
       } else {
-        setSelectedRegister("");
+        setSelectedRegisters([]);
       }
     } catch (err) {
       const mockR = [
@@ -90,9 +93,9 @@ export default function TrendsView() {
       const filtered = mockR.filter(r => r.device_id === deviceId);
       setRegisters(filtered);
       if (filtered.length > 0) {
-        setSelectedRegister(filtered[0].id);
+        setSelectedRegisters([filtered[0].id]);
       } else {
-        setSelectedRegister("");
+        setSelectedRegisters([]);
       }
     }
   };
@@ -106,63 +109,105 @@ export default function TrendsView() {
       loadRegisters(Number(selectedDevice));
     } else {
       setRegisters([]);
-      setSelectedRegister("");
+      setSelectedRegisters([]);
     }
   }, [selectedDevice]);
 
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".multi-select-container")) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
   const fetchTrends = async () => {
-    if (selectedDevice === "" || selectedRegister === "") return;
+    if (selectedDevice === "" || selectedRegisters.length === 0) return;
     setLoading(true);
     
     try {
-      const res = await fetch(`${API_URL}/api/trends/data?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
+      const idsStr = selectedRegisters.join(",");
+      const res = await fetch(`${API_URL}/api/trends/data?register_ids=${idsStr}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
       const data = await res.json();
-      setTrendData(data.points);
-      setStats({
-        min: data.stats.min,
-        max: data.stats.max,
-        avg: data.stats.avg
+      
+      const mergedPointsMap: Record<string, any> = {};
+      const newStats: Record<number, { min: number; max: number; avg: number }> = {};
+      
+      Object.entries(data).forEach(([rIdStr, regResult]: [string, any]) => {
+        const rId = Number(rIdStr);
+        newStats[rId] = regResult.stats;
+        regResult.points.forEach((pt: any) => {
+          if (!mergedPointsMap[pt.timestamp]) {
+            mergedPointsMap[pt.timestamp] = { timestamp: pt.timestamp };
+          }
+          mergedPointsMap[pt.timestamp][rId] = pt.value;
+        });
       });
+      
+      const mergedPoints = Object.values(mergedPointsMap).sort(
+        (a: any, b: any) => a.timestamp.localeCompare(b.timestamp)
+      );
+      
+      setTrendData(mergedPoints);
+      setRegisterStats(newStats);
     } catch (err) {
-      // Mock trend data points
-      const points: TrendDataPoint[] = [];
-      const baseTemp = selectedRegister === 1 ? 18.5 : selectedRegister === 5 ? 415.2 : 25;
-      const step = selectedRegister === 1 ? 0.2 : 0.8;
+      const mergedPointsMap: Record<string, any> = {};
+      const newStats: Record<number, { min: number; max: number; avg: number }> = {};
       
-      let tempStats = { min: 9999, max: -9999, sum: 0 };
-      
-      for (let i = 0; i < 24; i++) {
-        const timeStr = `${String(i).padStart(2, "0")}:00`;
-        const val = parseFloat((baseTemp + (Math.sin(i / 3) * step * 4) + (Math.random() - 0.5) * step).toFixed(2));
-        points.push({ timestamp: timeStr, value: val });
+      selectedRegisters.forEach((rId) => {
+        const reg = registers.find(r => r.id === rId);
+        const baseTemp = rId === 1 ? 18.5 : rId === 5 ? 415.2 : 25;
+        const step = rId === 1 ? 0.2 : 0.8;
         
-        if (val < tempStats.min) tempStats.min = val;
-        if (val > tempStats.max) tempStats.max = val;
-        tempStats.sum += val;
-      }
-      
-      setTrendData(points);
-      setStats({
-        min: tempStats.min,
-        max: tempStats.max,
-        avg: parseFloat((tempStats.sum / 24).toFixed(2))
+        let tempStats = { min: 9999, max: -9999, sum: 0 };
+        
+        for (let i = 0; i < 24; i++) {
+          const timeStr = `${String(i).padStart(2, "0")}:00`;
+          const val = parseFloat((baseTemp + (Math.sin(i / 3) * step * 4) + (Math.random() - 0.5) * step).toFixed(2));
+          
+          if (!mergedPointsMap[timeStr]) {
+            mergedPointsMap[timeStr] = { timestamp: timeStr };
+          }
+          mergedPointsMap[timeStr][rId] = val;
+          
+          if (val < tempStats.min) tempStats.min = val;
+          if (val > tempStats.max) tempStats.max = val;
+          tempStats.sum += val;
+        }
+        
+        newStats[rId] = {
+          min: tempStats.min,
+          max: tempStats.max,
+          avg: parseFloat((tempStats.sum / 24).toFixed(2))
+        };
       });
+      
+      const mergedPoints = Object.values(mergedPointsMap).sort(
+        (a: any, b: any) => a.timestamp.localeCompare(b.timestamp)
+      );
+      
+      setTrendData(mergedPoints);
+      setRegisterStats(newStats);
     } finally {
       setLoading(false);
     }
   };
 
   const handleExportPDF = async () => {
-    if (selectedRegister === "") return;
+    if (selectedRegisters.length === 0) return;
     setExporting(true);
     try {
-      const response = await fetch(`${API_URL}/api/trends/export-pdf?register_id=${selectedRegister}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
+      const idsStr = selectedRegisters.join(",");
+      const response = await fetch(`${API_URL}/api/trends/export-pdf?register_ids=${idsStr}&start_date=${startDate}&end_date=${endDate}`, { headers: getAuthHeaders() });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `TrendReport_${selectedRegister}_${startDate}.pdf`;
+        a.download = `TrendReport_${startDate}.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -170,18 +215,15 @@ export default function TrendsView() {
         alert("Failed to export PDF from backend. Checking details...");
       }
     } catch (err) {
-      // Local client-side warning mock
       alert("Backend offline. PDF generation is compiled in Python (ReportLab) on the FastAPI server. Please check the backend connection.");
     } finally {
       setExporting(false);
     }
   };
 
-  const activeRegister = registers.find(r => r.id === Number(selectedRegister));
-
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
 
       <main className="main-content">
         <header className="page-header">
@@ -204,14 +246,88 @@ export default function TrendsView() {
               </select>
             </div>
 
-            <div className="form-group" style={{ margin: 0, flex: 1, minWidth: "200px" }}>
-              <label className="form-label">Select Register Point</label>
-              <select className="form-control" value={selectedRegister} onChange={e => setSelectedRegister(e.target.value === "" ? "" : Number(e.target.value))} disabled={!selectedDevice}>
-                <option value="">-- Select Register --</option>
-                {registers.map(r => (
-                  <option key={r.id} value={r.id}>{r.name} ({r.unit})</option>
-                ))}
-              </select>
+            <div className="form-group multi-select-container" style={{ margin: 0, flex: 1, minWidth: "240px", position: "relative" }}>
+              <label className="form-label">Select Register Points</label>
+              <div 
+                className="form-control" 
+                style={{ 
+                  cursor: "pointer", 
+                  display: "flex", 
+                  justifyContent: "space-between", 
+                  alignItems: "center",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border-color)",
+                  minHeight: "42px",
+                  height: "auto",
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-sm)"
+                }}
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              >
+                <span style={{ color: selectedRegisters.length > 0 ? "var(--text-primary)" : "var(--text-muted)", fontSize: "14px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                  {selectedRegisters.length > 0 
+                    ? registers.filter(r => selectedRegisters.includes(r.id)).map(r => r.name).join(", ")
+                    : "-- Select Registers --"}
+                </span>
+                <ChevronDown size={16} style={{ flexShrink: 0, marginLeft: "8px" }} />
+              </div>
+              
+              {isDropdownOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  width: "100%",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border-color-hover)",
+                  borderRadius: "var(--radius-sm)",
+                  boxShadow: "var(--shadow-lg)",
+                  zIndex: 200,
+                  maxHeight: "250px",
+                  overflowY: "auto",
+                  marginTop: "4px",
+                  padding: "8px"
+                }}>
+                  {registers.map(r => {
+                    const isChecked = selectedRegisters.includes(r.id);
+                    return (
+                      <label 
+                        key={r.id} 
+                        style={{ 
+                          display: "flex", 
+                          alignItems: "center", 
+                          gap: "10px", 
+                          padding: "8px", 
+                          cursor: "pointer",
+                          borderRadius: "4px",
+                          background: isChecked ? "rgba(16, 185, 129, 0.05)" : "transparent",
+                          marginBottom: "2px"
+                        }}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedRegisters(selectedRegisters.filter(id => id !== r.id));
+                            } else {
+                              setSelectedRegisters([...selectedRegisters, r.id]);
+                            }
+                          }}
+                        />
+                        <span style={{ fontSize: "13px", color: "var(--text-primary)" }}>
+                          {r.name} ({r.unit})
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {registers.length === 0 && (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)", padding: "4px 8px", display: "block" }}>
+                      No registers configured for this device.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="form-group" style={{ margin: 0, width: "160px" }}>
@@ -225,11 +341,11 @@ export default function TrendsView() {
             </div>
 
             <div style={{ display: "flex", gap: "12px" }}>
-              <button onClick={fetchTrends} className="btn btn-primary" style={{ height: "42px" }} disabled={selectedRegister === ""}>
+              <button onClick={fetchTrends} className="btn btn-primary" style={{ height: "42px" }} disabled={selectedRegisters.length === 0}>
                 <Search size={16} /> Query
               </button>
               
-              <button onClick={handleExportPDF} className="btn btn-secondary" style={{ height: "42px" }} disabled={selectedRegister === "" || exporting}>
+              <button onClick={handleExportPDF} className="btn btn-secondary" style={{ height: "42px" }} disabled={selectedRegisters.length === 0 || exporting}>
                 <FileDown size={16} /> {exporting ? "Generating..." : "Export PDF"}
               </button>
             </div>
@@ -238,27 +354,72 @@ export default function TrendsView() {
 
         {trendData.length > 0 ? (
           <div>
-            {/* Statistics Cards */}
-            <div style={{ display: "flex", gap: "24px", marginBottom: "32px" }}>
-              <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
-                <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Minimum Value</span>
-                <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-secondary)", fontFamily: "var(--font-mono)" }}>
-                  {stats.min} <span style={{ fontSize: "14px" }}>{activeRegister?.unit}</span>
+            {/* Statistics Section */}
+            {selectedRegisters.length === 1 ? (
+              (() => {
+                const regId = selectedRegisters[0];
+                const reg = registers.find(r => r.id === regId);
+                const stats = registerStats[regId] || { min: 0, max: 0, avg: 0 };
+                return (
+                  <div style={{ display: "flex", gap: "24px", marginBottom: "32px" }}>
+                    <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
+                      <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Minimum Value</span>
+                      <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-secondary)", fontFamily: "var(--font-mono)" }}>
+                        {stats.min} <span style={{ fontSize: "14px" }}>{reg?.unit}</span>
+                      </div>
+                    </div>
+                    <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
+                      <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Maximum Value</span>
+                      <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-danger)", fontFamily: "var(--font-mono)" }}>
+                        {stats.max} <span style={{ fontSize: "14px" }}>{reg?.unit}</span>
+                      </div>
+                    </div>
+                    <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
+                      <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Average Value</span>
+                      <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-primary)", fontFamily: "var(--font-mono)" }}>
+                        {stats.avg} <span style={{ fontSize: "14px" }}>{reg?.unit}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="card" style={{ marginBottom: "32px", padding: "20px" }}>
+                <h3 style={{ fontSize: "16px", marginBottom: "16px", fontWeight: 600 }}>Registry Statistical Summary</h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "8px" }}>
+                        <th style={{ padding: "8px", color: "var(--text-muted)", fontSize: "13px" }}>Register</th>
+                        <th style={{ padding: "8px", color: "var(--text-muted)", fontSize: "13px" }}>Min Value</th>
+                        <th style={{ padding: "8px", color: "var(--text-muted)", fontSize: "13px" }}>Max Value</th>
+                        <th style={{ padding: "8px", color: "var(--text-muted)", fontSize: "13px" }}>Average Value</th>
+                        <th style={{ padding: "8px", color: "var(--text-muted)", fontSize: "13px" }}>Unit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRegisters.map((regId, idx) => {
+                        const reg = registers.find(r => r.id === regId);
+                        const stats = registerStats[regId] || { min: 0, max: 0, avg: 0 };
+                        const colorHex = PALETTE[idx % PALETTE.length];
+                        return (
+                          <tr key={regId} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                            <td style={{ padding: "12px 8px", fontSize: "14px", fontWeight: 500, display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", background: colorHex }} />
+                              {reg?.name || `Register ${regId}`}
+                            </td>
+                            <td style={{ padding: "12px 8px", fontSize: "14px", fontFamily: "var(--font-mono)", color: "var(--color-secondary)" }}>{stats.min}</td>
+                            <td style={{ padding: "12px 8px", fontSize: "14px", fontFamily: "var(--font-mono)", color: "var(--color-danger)" }}>{stats.max}</td>
+                            <td style={{ padding: "12px 8px", fontSize: "14px", fontFamily: "var(--font-mono)", color: "var(--color-primary)" }}>{stats.avg}</td>
+                            <td style={{ padding: "12px 8px", fontSize: "14px", color: "var(--text-muted)" }}>{reg?.unit}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
-                <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Maximum Value</span>
-                <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-danger)", fontFamily: "var(--font-mono)" }}>
-                  {stats.max} <span style={{ fontSize: "14px" }}>{activeRegister?.unit}</span>
-                </div>
-              </div>
-              <div className="card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
-                <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase" }}>Average Value</span>
-                <div style={{ fontSize: "28px", fontWeight: 700, marginTop: "4px", color: "var(--color-primary)", fontFamily: "var(--font-mono)" }}>
-                  {stats.avg} <span style={{ fontSize: "14px" }}>{activeRegister?.unit}</span>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Recharts Graphical Display */}
             <div className="card" style={{ padding: "32px 24px 16px 16px", height: "450px" }}>
@@ -266,7 +427,7 @@ export default function TrendsView() {
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="timestamp" stroke="var(--text-muted)" fontSize={12} />
-                  <YAxis stroke="var(--text-muted)" fontSize={12} unit={activeRegister?.unit} />
+                  <YAxis stroke="var(--text-muted)" fontSize={12} unit={selectedRegisters.length === 1 ? registers.find(r => r.id === selectedRegisters[0])?.unit : undefined} />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: "var(--bg-main)", 
@@ -277,23 +438,37 @@ export default function TrendsView() {
                   />
                   <Legend verticalAlign="top" height={36} />
                   
-                  <Line 
-                    name={activeRegister?.name || "Value"} 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="var(--color-primary)" 
-                    strokeWidth={2}
-                    dot={{ fill: "var(--color-primary)", r: 3 }}
-                    activeDot={{ r: 6 }} 
-                  />
+                  {selectedRegisters.map((regId, idx) => {
+                    const reg = registers.find(r => r.id === regId);
+                    const colorHex = PALETTE[idx % PALETTE.length];
+                    return (
+                      <Line 
+                        key={regId}
+                        name={reg?.name || `Register ${regId}`} 
+                        type="monotone" 
+                        dataKey={String(regId)} 
+                        stroke={colorHex} 
+                        strokeWidth={2}
+                        dot={{ fill: colorHex, r: 3 }}
+                        activeDot={{ r: 6 }} 
+                      />
+                    );
+                  })}
 
-                  {/* Reference line limits alerts */}
-                  {activeRegister?.limit_min !== undefined && (
-                    <ReferenceLine y={activeRegister.limit_min} label={{ value: `Min limit (${activeRegister.limit_min})`, fill: "var(--color-warning)", position: "top", fontSize: 11 }} stroke="var(--color-warning)" strokeDasharray="5 5" />
-                  )}
-                  {activeRegister?.limit_max !== undefined && (
-                    <ReferenceLine y={activeRegister.limit_max} label={{ value: `Max limit (${activeRegister.limit_max})`, fill: "var(--color-danger)", position: "top", fontSize: 11 }} stroke="var(--color-danger)" strokeDasharray="5 5" />
-                  )}
+                  {/* Reference line limits alerts for single register */}
+                  {selectedRegisters.length === 1 && (() => {
+                    const reg = registers.find(r => r.id === selectedRegisters[0]);
+                    return (
+                      <>
+                        {reg?.limit_min !== undefined && (
+                          <ReferenceLine y={reg.limit_min} label={{ value: `Min limit (${reg.limit_min})`, fill: "var(--color-warning)", position: "top", fontSize: 11 }} stroke="var(--color-warning)" strokeDasharray="5 5" />
+                        )}
+                        {reg?.limit_max !== undefined && (
+                          <ReferenceLine y={reg.limit_max} label={{ value: `Max limit (${reg.limit_max})`, fill: "var(--color-danger)", position: "top", fontSize: 11 }} stroke="var(--color-danger)" strokeDasharray="5 5" />
+                        )}
+                      </>
+                    );
+                  })()}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -303,7 +478,7 @@ export default function TrendsView() {
             <Activity size={48} style={{ color: "var(--text-muted)", marginBottom: "16px", opacity: 0.5 }} />
             <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>Historical Query Analyzer</h3>
             <p style={{ color: "var(--text-muted)", maxWidth: "450px", fontSize: "14px" }}>
-              Select a Modbus device and mapped register channel, choose your temporal window, and hit "Query" to graph trends and extract formal audit reports.
+              Select a Modbus device and mapped register channels, choose your temporal window, and hit "Query" to graph trends and extract formal audit reports.
             </p>
           </div>
         )}

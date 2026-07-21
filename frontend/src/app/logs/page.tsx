@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import { 
   BellRing, 
   Mail, 
@@ -129,7 +129,7 @@ export default function LogsView() {
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Navbar />
 
       <main className="main-content">
         <header className="page-header">

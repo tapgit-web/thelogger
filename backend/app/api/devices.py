@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 from app.core import get_db
 from app.models import DBDevice, DBRegister
@@ -178,3 +178,46 @@ def delete_register(id: int, db: Session = Depends(get_db), current_user = Depen
         start_polling(asyncio.get_event_loop())
 
     return {"status": "success"}
+
+class RegisterBulkCreate(BaseModel):
+    name: str
+    address: int
+    register_type: str
+    data_type: str
+    multiplier: float = 1.0
+    divisor: float = 1.0
+    unit: str = ""
+    limit_min: Optional[float] = None
+    limit_max: Optional[float] = None
+
+@router.post("/api/devices/{deviceId}/registers/bulk")
+def create_registers_bulk(deviceId: int, req: List[RegisterBulkCreate], clear_existing: bool = False, db: Session = Depends(get_db), current_user = Depends(get_admin_user)):
+    dev = db.query(DBDevice).filter(DBDevice.id == deviceId).first()
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    if clear_existing:
+        db.query(DBRegister).filter(DBRegister.device_id == deviceId).delete()
+        
+    for item in req:
+        reg = DBRegister(
+            device_id=deviceId,
+            name=item.name,
+            address=item.address,
+            register_type=item.register_type,
+            data_type=item.data_type,
+            multiplier=item.multiplier,
+            divisor=item.divisor,
+            unit=item.unit,
+            limit_min=item.limit_min,
+            limit_max=item.limit_max
+        )
+        db.add(reg)
+        
+    db.commit()
+    
+    if is_polling:
+        stop_polling()
+        start_polling(asyncio.get_event_loop())
+        
+    return {"status": "success", "count": len(req)}

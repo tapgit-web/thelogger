@@ -117,7 +117,7 @@ export default function Login() {
         <div className="auth-header">
           <div className="auth-logo" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "8px" }}>
             <Terminal size={32} style={{ color: "var(--color-primary)" }} />
-            THE <span>LOGGER</span>
+            M-<span>OBSERVER</span>
           </div>
           <p className="page-subtitle">
             {needsActivation 
