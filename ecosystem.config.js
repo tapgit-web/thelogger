@@ -10,9 +10,12 @@ module.exports = {
     // --------------------------------------------------------------------------
     {
       name: "thelogger-backend",
-      cwd: "./backend",
-      script: "main.py",
-      interpreter: "./.venv/bin/python", // Relative to cwd (./backend/.venv/bin/python)
+      //      cwd: "./backend",
+      //     script: "main.py",
+      //    interpreter: "./backend/.venv/bin/python", // Relative to cwd (./backend/.venv/bin/python)
+      cwd: "/home/tap/thelogger/backend",
+      script: "/home/tap/thelogger/backend/main.py",
+      interpreter: "/home/tap/thelogger/backend/.venv/bin/python",
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",

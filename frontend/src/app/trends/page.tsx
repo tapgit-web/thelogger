@@ -2,24 +2,41 @@
 
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer,
-  ReferenceLine
-} from "recharts";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from "chart.js";
+import { Line } from "react-chartjs-2";
 import { FileDown, Calendar, Search, Activity, HelpCircle, ChevronDown } from "lucide-react";
 import { API_URL } from "@/config";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const getAuthHeaders = (): Record<string, string> => {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("logger_token");
-  return token ? { "Authorization": `Bearer ${token}` } : {};
+  return {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+  };
 };
 
 const PALETTE = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"];
@@ -61,12 +78,20 @@ export default function TrendsView() {
   const loadConfig = async () => {
     try {
       const resDev = await fetch(`${API_URL}/api/devices`, { headers: getAuthHeaders() });
+      if (!resDev.ok) {
+        throw new Error(`HTTP error ${resDev.status}`);
+      }
       const listDev = await resDev.json();
-      setDevices(listDev);
-      if (listDev.length > 0) {
-        setSelectedDevice(listDev[0].id);
+      if (Array.isArray(listDev)) {
+        setDevices(listDev);
+        if (listDev.length > 0) {
+          setSelectedDevice(listDev[0].id);
+        }
+      } else {
+        throw new Error("Response is not an array");
       }
     } catch (err) {
+      console.error("Failed to fetch devices in trends view:", err);
       // Mock defaults
       const mockD = [{ id: 1, name: "PLC_Chiller" }, { id: 3, name: "Energy_Meter" }];
       setDevices(mockD);
@@ -77,14 +102,22 @@ export default function TrendsView() {
   const loadRegisters = async (deviceId: number) => {
     try {
       const res = await fetch(`${API_URL}/api/devices/${deviceId}/registers`, { headers: getAuthHeaders() });
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
       const listReg = await res.json();
-      setRegisters(listReg);
-      if (listReg.length > 0) {
-        setSelectedRegisters([listReg[0].id]);
+      if (Array.isArray(listReg)) {
+        setRegisters(listReg);
+        if (listReg.length > 0) {
+          setSelectedRegisters([listReg[0].id]);
+        } else {
+          setSelectedRegisters([]);
+        }
       } else {
-        setSelectedRegisters([]);
+        throw new Error("Response is not an array");
       }
     } catch (err) {
+      console.error("Failed to fetch registers in trends view:", err);
       const mockR = [
         { id: 1, device_id: 1, name: "Chiller Temperature", unit: "°C", limit_min: 5, limit_max: 35 },
         { id: 2, device_id: 1, name: "Chiller State", unit: "ON/OFF" },
@@ -234,13 +267,13 @@ export default function TrendsView() {
         </header>
 
         {/* Filter configuration card */}
-        <section className="card" style={{ marginBottom: "32px" }}>
+        <section className="card" style={{ marginBottom: "32px", position: "relative", zIndex: 50, overflow: "visible" }}>
           <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", alignItems: "flex-end" }}>
             <div className="form-group" style={{ margin: 0, flex: 1, minWidth: "200px" }}>
               <label className="form-label">Select Device</label>
               <select className="form-control" value={selectedDevice} onChange={e => setSelectedDevice(e.target.value === "" ? "" : Number(e.target.value))}>
                 <option value="">-- Select Device --</option>
-                {devices.map(d => (
+                {Array.isArray(devices) && devices.map(d => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
@@ -265,7 +298,7 @@ export default function TrendsView() {
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               >
                 <span style={{ color: selectedRegisters.length > 0 ? "var(--text-primary)" : "var(--text-muted)", fontSize: "14px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                  {selectedRegisters.length > 0 
+                  {selectedRegisters.length > 0 && Array.isArray(registers)
                     ? registers.filter(r => selectedRegisters.includes(r.id)).map(r => r.name).join(", ")
                     : "-- Select Registers --"}
                 </span>
@@ -281,14 +314,14 @@ export default function TrendsView() {
                   background: "var(--bg-card)",
                   border: "1px solid var(--border-color-hover)",
                   borderRadius: "var(--radius-sm)",
-                  boxShadow: "var(--shadow-lg)",
-                  zIndex: 200,
-                  maxHeight: "250px",
+                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
+                  zIndex: 9999,
+                  maxHeight: "260px",
                   overflowY: "auto",
-                  marginTop: "4px",
+                  marginTop: "6px",
                   padding: "8px"
                 }}>
-                  {registers.map(r => {
+                  {Array.isArray(registers) && registers.map(r => {
                     const isChecked = selectedRegisters.includes(r.id);
                     return (
                       <label 
@@ -421,57 +454,89 @@ export default function TrendsView() {
               </div>
             )}
 
-            {/* Recharts Graphical Display */}
-            <div className="card" style={{ padding: "32px 24px 16px 16px", height: "450px" }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="timestamp" stroke="var(--text-muted)" fontSize={12} />
-                  <YAxis stroke="var(--text-muted)" fontSize={12} unit={selectedRegisters.length === 1 ? registers.find(r => r.id === selectedRegisters[0])?.unit : undefined} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: "var(--bg-main)", 
-                      borderColor: "var(--border-color-hover)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)"
-                    }} 
-                  />
-                  <Legend verticalAlign="top" height={36} />
-                  
-                  {selectedRegisters.map((regId, idx) => {
-                    const reg = registers.find(r => r.id === regId);
-                    const colorHex = PALETTE[idx % PALETTE.length];
-                    return (
-                      <Line 
-                        key={regId}
-                        name={reg?.name || `Register ${regId}`} 
-                        type="monotone" 
-                        dataKey={String(regId)} 
-                        stroke={colorHex} 
-                        strokeWidth={2}
-                        dot={{ fill: colorHex, r: 3 }}
-                        activeDot={{ r: 6 }} 
-                      />
-                    );
-                  })}
+            {/* Chart.js Graphical Display */}
+            {(() => {
+              const chartLabels = trendData.map(d => d.timestamp);
+              const chartDatasets = selectedRegisters.map((regId, idx) => {
+                const reg = Array.isArray(registers) ? registers.find(r => r.id === regId) : undefined;
+                const colorHex = PALETTE[idx % PALETTE.length];
+                return {
+                  label: reg ? `${reg.name} (${reg.unit})` : `Register ${regId}`,
+                  data: trendData.map(d => d[regId]),
+                  borderColor: colorHex,
+                  backgroundColor: colorHex + "20",
+                  borderWidth: 2,
+                  pointRadius: 3,
+                  pointHoverRadius: 6,
+                  tension: 0.3,
+                  fill: false,
+                };
+              });
 
-                  {/* Reference line limits alerts for single register */}
-                  {selectedRegisters.length === 1 && (() => {
-                    const reg = registers.find(r => r.id === selectedRegisters[0]);
-                    return (
-                      <>
-                        {reg?.limit_min !== undefined && (
-                          <ReferenceLine y={reg.limit_min} label={{ value: `Min limit (${reg.limit_min})`, fill: "var(--color-warning)", position: "top", fontSize: 11 }} stroke="var(--color-warning)" strokeDasharray="5 5" />
-                        )}
-                        {reg?.limit_max !== undefined && (
-                          <ReferenceLine y={reg.limit_max} label={{ value: `Max limit (${reg.limit_max})`, fill: "var(--color-danger)", position: "top", fontSize: 11 }} stroke="var(--color-danger)" strokeDasharray="5 5" />
-                        )}
-                      </>
-                    );
-                  })()}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+              const chartData = {
+                labels: chartLabels,
+                datasets: chartDatasets
+              };
+
+              const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "top" as const,
+                    labels: {
+                      color: "#94A3B8",
+                      font: {
+                        family: "Outfit, sans-serif",
+                        size: 13,
+                      },
+                      usePointStyle: true,
+                      padding: 20
+                    }
+                  },
+                  tooltip: {
+                    backgroundColor: "#0F172A",
+                    titleColor: "#F8FAFC",
+                    bodyColor: "#F8FAFC",
+                    borderColor: "rgba(239, 68, 68, 0.4)",
+                    borderWidth: 1,
+                    padding: 12,
+                    boxPadding: 6,
+                    usePointStyle: true
+                  }
+                },
+                scales: {
+                  x: {
+                    grid: {
+                      color: "rgba(255, 255, 255, 0.05)"
+                    },
+                    ticks: {
+                      color: "#64748B",
+                      font: {
+                        size: 11
+                      }
+                    }
+                  },
+                  y: {
+                    grid: {
+                      color: "rgba(255, 255, 255, 0.05)"
+                    },
+                    ticks: {
+                      color: "#64748B",
+                      font: {
+                        size: 11
+                      }
+                    }
+                  }
+                }
+              };
+
+              return (
+                <div className="card" style={{ padding: "24px", height: "450px" }}>
+                  <Line data={chartData} options={chartOptions} />
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", textAlign: "center" }}>

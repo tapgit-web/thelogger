@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Navbar from "@/components/Navbar";
-import { Play, Square, Activity, Database, AlertCircle, RefreshCw } from "lucide-react";
+import { Play, Square, Activity, Database, AlertCircle, RefreshCw, Filter, Search, X, Check, Cpu } from "lucide-react";
 import { API_URL, WS_URL } from "@/config";
 
 interface RegisterReading {
@@ -23,6 +23,8 @@ export default function Dashboard() {
   const [wsStatus, setWsStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
   const [isPolling, setIsPolling] = useState(false);
   const [deviceStatuses, setDeviceStatuses] = useState<{[key: string]: boolean}>({});
+  const [selectedDeviceFilter, setSelectedDeviceFilter] = useState<string>("ALL");
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -148,6 +150,21 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [wsStatus, isPolling]);
 
+  // Derived list of available unique device names
+  const availableDevices = Array.from(
+    new Set([...Object.keys(deviceStatuses), ...readings.map(r => r.device_name)])
+  ).filter(Boolean).sort();
+
+  // Filtered readings list based on selected device filter and search keyword
+  const filteredReadings = readings.filter(reading => {
+    const matchesDevice = selectedDeviceFilter === "ALL" || reading.device_name === selectedDeviceFilter;
+    const matchesSearch = !searchTerm.trim() || 
+      reading.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      reading.device_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reading.address.toString().includes(searchTerm);
+    return matchesDevice && matchesSearch;
+  });
+
   return (
     <div className="app-container">
       <Navbar />
@@ -187,29 +204,152 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Device Status Banner */}
-        <section className="card" style={{ marginBottom: "32px", padding: "16px 24px" }}>
-          <h3 style={{ fontSize: "16px", marginBottom: "12px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Database size={18} /> Modbus Device States
-          </h3>
-          <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-            {Object.keys(deviceStatuses).length === 0 ? (
+        {/* Device Status Banner & Filter Toolbar */}
+        <section className="card" style={{ marginBottom: "32px", padding: "20px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "16px" }}>
+            <h3 style={{ fontSize: "16px", margin: 0, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Database size={18} /> Modbus Device States
+            </h3>
+
+            {/* Filter controls */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              {/* Filter Select Dropdown */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg-input)", padding: "4px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                <Filter size={14} style={{ color: selectedDeviceFilter !== "ALL" ? "var(--color-primary)" : "var(--text-muted)" }} />
+                <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-muted)" }}>Device Filter:</span>
+                <select
+                  id="select-device-filter"
+                  value={selectedDeviceFilter}
+                  onChange={(e) => setSelectedDeviceFilter(e.target.value)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    outline: "none",
+                    cursor: "pointer",
+                    paddingRight: "8px"
+                  }}
+                >
+                  <option value="ALL" style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}>
+                    All Devices ({readings.length} registers)
+                  </option>
+                  {availableDevices.map(deviceName => {
+                    const count = readings.filter(r => r.device_name === deviceName).length;
+                    return (
+                      <option key={deviceName} value={deviceName} style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}>
+                        {deviceName} ({count} {count === 1 ? "register" : "registers"})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Search Box */}
+              <div style={{ position: "relative", minWidth: "200px" }}>
+                <Search size={14} style={{ position: "absolute", left: "10px", top: "10px", color: "var(--text-muted)" }} />
+                <input
+                  id="input-telemetry-search"
+                  type="text"
+                  placeholder="Search registers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "6px 12px 6px 32px",
+                    fontSize: "13px",
+                    borderRadius: "var(--radius-sm)",
+                    border: "1px solid var(--border-color)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    outline: "none"
+                  }}
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={() => setSearchTerm("")}
+                    style={{ position: "absolute", right: "8px", top: "8px", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Reset filter button */}
+              {(selectedDeviceFilter !== "ALL" || searchTerm !== "") && (
+                <button
+                  onClick={() => { setSelectedDeviceFilter("ALL"); setSearchTerm(""); }}
+                  className="btn btn-secondary"
+                  style={{ padding: "6px 12px", fontSize: "12px", height: "34px", gap: "4px" }}
+                >
+                  <X size={12} /> Reset Filter
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Device Status Badges */}
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center" }}>
+            {Object.keys(deviceStatuses).length === 0 && availableDevices.length === 0 ? (
               <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>No devices configured</span>
             ) : (
-              Object.entries(deviceStatuses).map(([name, isOnline]) => (
-                <div key={name} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "var(--radius-sm)" }}>
-                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: isOnline ? "var(--color-success)" : "var(--color-danger)" }}></div>
-                  <span style={{ fontSize: "14px", fontWeight: 600 }}>{name}</span>
-                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{isOnline ? "Online" : "Connection Error"}</span>
-                </div>
-              ))
+              availableDevices.map((name) => {
+                const isOnline = deviceStatuses[name] ?? true;
+
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      padding: "8px 16px",
+                      borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--border-color)"
+                    }}
+                  >
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: isOnline ? "var(--color-success)" : "var(--color-danger)" }}></div>
+                    <span style={{ fontSize: "14px", fontWeight: 600 }}>{name}</span>
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{isOnline ? "Online" : "Connection Error"}</span>
+                  </div>
+                );
+              })
             )}
           </div>
         </section>
 
+        {/* Filter Summary Bar */}
+        {(selectedDeviceFilter !== "ALL" || searchTerm !== "") && (
+          <div style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            marginBottom: "16px", 
+            padding: "8px 16px", 
+            background: "rgba(37, 99, 235, 0.06)", 
+            borderRadius: "var(--radius-sm)", 
+            border: "1px solid rgba(37, 99, 235, 0.2)",
+            fontSize: "13px",
+            color: "var(--text-primary)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <Filter size={14} style={{ color: "var(--color-secondary)" }} />
+              <span>
+                Filtered by: <strong>{selectedDeviceFilter !== "ALL" ? selectedDeviceFilter : "All Devices"}</strong>
+                {searchTerm && <> matching "<strong>{searchTerm}</strong>"</>}
+              </span>
+            </div>
+            <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+              Showing {filteredReadings.length} of {readings.length} registers
+            </span>
+          </div>
+        )}
+
         {/* Telemetry Grid */}
         <section className="dashboard-grid">
-          {readings.map((reading) => (
+          {filteredReadings.map((reading) => (
             <div key={reading.id} className="card telemetry-card" style={{
               borderLeft: reading.status === "error" ? "4px solid var(--color-danger)" : "1px solid var(--border-color)"
             }}>
@@ -250,6 +390,25 @@ export default function Dashboard() {
           ))}
         </section>
 
+        {/* Filtered Empty State */}
+        {readings.length > 0 && filteredReadings.length === 0 && (
+          <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "220px", textAlign: "center", marginTop: "16px" }}>
+            <Filter size={40} style={{ color: "var(--text-muted)", marginBottom: "12px", opacity: 0.5 }} />
+            <h3 style={{ fontSize: "16px", marginBottom: "6px" }}>No Telemetry Found</h3>
+            <p style={{ color: "var(--text-muted)", maxWidth: "420px", fontSize: "13px", marginBottom: "16px" }}>
+              No registers match device filter "<strong>{selectedDeviceFilter}</strong>"
+              {searchTerm && <> and search "<strong>{searchTerm}</strong>"</>}.
+            </p>
+            <button
+              onClick={() => { setSelectedDeviceFilter("ALL"); setSearchTerm(""); }}
+              className="btn btn-secondary"
+              style={{ fontSize: "13px" }}
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
+
         {readings.length === 0 && (
           <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "250px", textAlign: "center" }}>
             <Activity size={48} style={{ color: "var(--text-muted)", marginBottom: "16px", opacity: 0.5 }} />
@@ -263,3 +422,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

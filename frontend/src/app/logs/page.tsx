@@ -35,7 +35,12 @@ interface EmailLog {
 const getAuthHeaders = (): Record<string, string> => {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("logger_token");
-  return token ? { "Authorization": `Bearer ${token}` } : {};
+  return {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+  };
 };
 
 export default function LogsView() {
@@ -43,6 +48,7 @@ export default function LogsView() {
   const [alarmLogs, setAlarmLogs] = useState<AlarmLog[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDevice, setSelectedDevice] = useState<string>("ALL");
   const [loading, setLoading] = useState(false);
 
   const fetchLogs = async () => {
@@ -112,20 +118,31 @@ export default function LogsView() {
     fetchLogs();
   }, [activeTab]);
 
-  const filteredAlarms = alarmLogs.filter(
-    (log) =>
+  const uniqueDevices = Array.from(
+    new Set([
+      ...alarmLogs.map(l => l.device_name),
+      ...emailLogs.map(l => l.device_name)
+    ])
+  ).filter(Boolean).sort();
+
+  const filteredAlarms = alarmLogs.filter((log) => {
+    const matchesDevice = selectedDevice === "ALL" || log.device_name === selectedDevice;
+    const matchesSearch = !searchTerm ||
       log.device_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.field_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.condition.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      log.condition.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesDevice && matchesSearch;
+  });
 
-  const filteredEmails = emailLogs.filter(
-    (log) =>
+  const filteredEmails = emailLogs.filter((log) => {
+    const matchesDevice = selectedDevice === "ALL" || log.device_name === selectedDevice;
+    const matchesSearch = !searchTerm ||
       log.device_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.field_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.recipient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      log.status.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesDevice && matchesSearch;
+  });
 
   return (
     <div className="app-container">
@@ -175,18 +192,45 @@ export default function LogsView() {
               </button>
             </div>
 
-            {/* Search */}
-            <div className="form-group" style={{ margin: 0, minWidth: "300px", position: "relative" }}>
-              <Search size={16} style={{ position: "absolute", left: "14px", top: "13px", color: "var(--text-muted)" }} />
-              <input
-                id="input-log-search"
-                type="text"
-                placeholder={`Search ${activeTab === "alarms" ? "alarms by device, name..." : "emails by recipient, status..."}`}
-                className="form-control"
-                style={{ paddingLeft: "40px" }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            {/* Filter controls */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              {/* Device Filter Dropdown */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--bg-input)", padding: "6px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 500 }}>Device:</span>
+                <select
+                  id="select-log-device-filter"
+                  value={selectedDevice}
+                  onChange={(e) => setSelectedDevice(e.target.value)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="ALL" style={{ background: "var(--bg-card)" }}>All Devices</option>
+                  {uniqueDevices.map(dev => (
+                    <option key={dev} value={dev} style={{ background: "var(--bg-card)" }}>{dev}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search */}
+              <div className="form-group" style={{ margin: 0, minWidth: "260px", position: "relative" }}>
+                <Search size={16} style={{ position: "absolute", left: "14px", top: "13px", color: "var(--text-muted)" }} />
+                <input
+                  id="input-log-search"
+                  type="text"
+                  placeholder={`Search ${activeTab === "alarms" ? "alarms by name, condition..." : "emails by recipient, status..."}`}
+                  className="form-control"
+                  style={{ paddingLeft: "40px" }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </section>
